@@ -29,6 +29,19 @@ use @crypto_auth_verify[I32](h: Pointer[U8] tag,
                              inlen: ULong,
                              k: Pointer[U8] tag)
 
+
+use @crypto_scalarmult_bytes[USize]()
+// Multiply `p` by a scalar `n` and put the result in `q`
+// `q` should be of size crypto_scalarmult_bytes
+use @crypto_scalarmult[I32](q: Pointer[U8] tag, n: Pointer[U8] tag, p: Pointer[U8] tag)
+
+use @crypto_scalarmult_curve25519_bytes[USize]()
+// Convert a Ed25519 pk into X25519 pk, or
+// convert a Ed25519 sk into X25519 sk
+// The X25519 keys must be of size crypto_scalarmult_curve25519_bytes
+use @crypto_sign_ed25519_pk_to_curve25519[I32](curve: Pointer[U8] tag, pk: Pointer[U8] tag)
+use @crypto_sign_ed25519_sk_to_curve25519[I32](curve: Pointer[U8] tag, sk: Pointer[U8] tag)
+
 class val Ed25519Public
   let _inner: Array[U8] val
   new val create(from: Array[U8] iso) => _inner = consume from
@@ -119,3 +132,24 @@ primitive Sodium
                              msg.cpointer(),
                              msg.size().ulong(),
                              key.cpointer())
+
+  fun scalar_mult(scalar: ByteSeq, point: ByteSeq): ByteSeq? =>
+    let q = _make_buffer(@crypto_scalarmult_bytes())
+    let ret = @crypto_scalarmult(q.cpointer(), scalar.cpointer(), point.cpointer())
+    if \unlikely\ ret != 0 then error end
+
+    q
+
+  fun ed25519_pk_to_curve25519(pk: Ed25519Public): Curve25519Public? =>
+    let curve_pk = _make_buffer(@crypto_scalarmult_curve25519_bytes())
+    let ret = @crypto_sign_ed25519_pk_to_curve25519(curve_pk.cpointer(), pk.cpointer())
+    if \unlikely\ ret != 0 then error end
+
+    Curve25519Public(consume curve_pk)
+
+  fun ed25519_sk_to_curve25519(sk: Ed25519Secret): Curve25519Secret? =>
+    let curve_sk = _make_buffer(@crypto_scalarmult_curve25519_bytes())
+    let ret = @crypto_sign_ed25519_sk_to_curve25519(curve_sk.cpointer(), sk.cpointer())
+    if \unlikely\ ret != 0 then error end
+
+    Curve25519Secret(consume curve_sk)

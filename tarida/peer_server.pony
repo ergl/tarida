@@ -88,6 +88,7 @@ actor _HandshakeServer
         Debug.out("_HandshakeServer _ClientAuth?")
       end
     else
+      Debug.err("Error: _HandshakeServer bad handshake")
       _close()
     end
 
@@ -97,6 +98,7 @@ actor _HandshakeServer
     if not h.hello_verify(msg) then error end
 
     (_socket as TCPConnection).write(h.hello_challenge()?)
+    h.server_derive_secret()?
     _h = h
 
   fun _close() =>

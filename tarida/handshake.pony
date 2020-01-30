@@ -2,13 +2,16 @@ use "debug"
 use "sodium"
 
 class Handshake
-  let _pk: Ed25519Public
-  let _sk: Ed25519Secret
+  let _id_pk: Ed25519Public
+  let _id_sk: Ed25519Secret
 
   let _eph_pk: Curve25519Public
   let _eph_sk: Curve25519Secret
 
   var _other_eph_pk: (Curve25519Public | None) = None
+
+  var _short_term_shared_secret: (ByteSeq | None) = None
+  var _long_term_shared_secret: (ByteSeq | None) = None
 
   let _network_id: Array[U8] val = [
     as U8: 0xd4; 0xa1; 0xcb; 0x88; 0xa6; 0x6f
@@ -22,8 +25,8 @@ class Handshake
              eph_public: Curve25519Public,
              eph_secret: Curve25519Secret) =>
 
-    _pk = id_public
-    _sk = id_secret
+    _id_pk = id_public
+    _id_sk = id_secret
     _eph_pk = eph_public
     _eph_sk = eph_secret
 
@@ -52,3 +55,28 @@ class Handshake
     end
 
     valid
+
+  // Must be only called from server
+  fun ref server_derive_secret()? =>
+    _short_term_shared_secret = Sodium.scalar_mult(
+      _eph_sk.string(),
+      (_other_eph_pk as Curve25519Public).string()
+    )?
+
+    _long_term_shared_secret = Sodium.scalar_mult(
+      Sodium.ed25519_sk_to_curve25519(_id_sk)?.string(),
+      (_other_eph_pk as Curve25519Public).string()
+    )?
+
+  // TODO(borja): Maybe SHS should already know other_id_pub?
+  // Must be only called from client
+  fun ref client_derive_secret(other_id_pub: Ed25519Public)? =>
+    _short_term_shared_secret = Sodium.scalar_mult(
+      _eph_sk.string(),
+      (_other_eph_pk as Curve25519Public).string()
+    )?
+
+    _long_term_shared_secret = Sodium.scalar_mult(
+      _eph_sk.string(),
+      Sodium.ed25519_pk_to_curve25519(other_id_pub)?.string()
+    )?
