@@ -1,47 +1,85 @@
 use "debug"
 use "sodium"
 
-class Handshake
+primitive _ClientHello
+primitive _ClientAuth
+type _ServerFSM is (_ClientHello | _ClientAuth)
+
+primitive _ServerHello
+primitive _ServerAccept
+type _ClientFSM is (_ServerHello | _ServerAccept)
+
+class iso HandshakeServer
+  var _state: _ServerFSM
+
   let _id_pk: Ed25519Public
   let _id_sk: Ed25519Secret
 
-  let _eph_pk: Curve25519Public
-  let _eph_sk: Curve25519Secret
+  var _eph_pk: (Curve25519Public | None) = None
+  var _eph_sk: (Curve25519Secret | None) = None
 
   var _other_eph_pk: (Curve25519Public | None) = None
 
   var _short_term_shared_secret: (ByteSeq | None) = None
   var _long_term_shared_secret: (ByteSeq | None) = None
 
-  let _network_id: Array[U8] val = [
-    as U8: 0xd4; 0xa1; 0xcb; 0x88; 0xa6; 0x6f
-           0x02; 0xf8; 0xdb; 0x63; 0x5c; 0xe2
-           0x64; 0x41; 0xcc; 0x5d; 0xac; 0x1b
-           0x08; 0x42; 0x0c; 0xea; 0xac; 0x23
-           0x08; 0x39; 0xb7; 0x55; 0x84; 0x5a; 0x9f; 0xfb]
+  new iso create(pk: Ed25519Public, sk: Ed25519Secret) =>
+    _id_pk = pk
+    _id_sk = sk
+    _state = _ClientHello
 
-  new create(id_public: Ed25519Public,
-             id_secret: Ed25519Secret,
-             eph_public: Curve25519Public,
-             eph_secret: Curve25519Secret) =>
+  fun ref init(): USize? =>
+    (_eph_pk, _eph_sk) = Sodium.curve25519_pair()?
+    64
 
-    _id_pk = id_public
-    _id_sk = id_secret
-    _eph_pk = eph_public
-    _eph_sk = eph_secret
+  // Return the number of bytes to expect for the next call, along
+  // with the output of this step. If the byte size is 0, we're done
+  // It might error if some of the verifications are wrong
+  fun ref step(msg: String): (USize, String)? =>
+    match _state
+    | _ClientHello =>
+      Debug.out("HandshakeServer _ClientHello")
+      _state = _ClientAuth
+      (64, _do_hello(msg)?)
+    | _ClientAuth =>
+      Debug.out("HandshakeServer _ClientAuth?")
+      (0, "")
+    end
 
-  fun hello_challenge(): String? =>
-    let auth = Sodium.auth_msg(_eph_pk.string(), _network_id)?
-    recover String.create(auth.size() + _eph_pk.size()).>append(auth).>append(_eph_pk) end
+  fun ref _do_hello(msg: String): String? =>
+    let other_eph_pk = Handshake.hello_verify(msg)?
+    let resp = Handshake.hello_challenge(_eph_pk as Curve25519Public)?
+    let secrets = Handshake.server_derive_secret(
+      _id_sk,
+      _eph_sk as Curve25519Secret,
+      other_eph_pk
+    )?
 
-  // TODO(borja): Should we store state inside this class?
-  // Maybe it could lead to wrong usage, if, for example, a hello_verify returns
-  // false, but we keep using it afterwards. As soon as the auth fails, we should
-  // discard our ephemeral keys, and start from scratch.
-  // This could be done by making Handshake a primitive. This operation should
-  // then return either an optional ephemeral public key, or None (error)
-  fun ref hello_verify(msg: String): Bool =>
-    if msg.size() != 64 then false end
+    _other_eph_pk = other_eph_pk
+    _short_term_shared_secret = secrets._1
+    _long_term_shared_secret = secrets._2
+
+    resp
+
+primitive Handshake
+  fun network_id(): Array[U8] val =>
+    [as U8: 0xd4; 0xa1; 0xcb; 0x88
+            0xa6; 0x6f; 0x02; 0xf8
+            0xdb; 0x63; 0x5c; 0xe2
+            0x64; 0x41; 0xcc; 0x5d
+            0xac; 0x1b; 0x08; 0x42
+            0x0c; 0xea; 0xac; 0x23
+            0x08; 0x39; 0xb7; 0x55
+            0x84; 0x5a; 0x9f; 0xfb]
+
+  fun hello_challenge(pk: Curve25519Public): String? =>
+    let auth = Sodium.auth_msg(pk.string(), network_id())?
+    recover String.create(auth.size() + pk.size())
+                  .>append(auth).>append(pk)
+    end
+
+  fun hello_verify(msg: String): Curve25519Public? =>
+    if msg.size() != 64 then error end
 
     let other_hmac = msg.trim(0, 31)
     let other_eph_pk = msg.trim(32) // until the end
@@ -49,36 +87,48 @@ class Handshake
     let valid = Sodium.auth_msg_verify(
       where auth_tag = other_hmac,
       msg = other_eph_pk,
-      key = _network_id
+      key = network_id()
     )
 
-    if valid then
-      _other_eph_pk = Curve25519Public(other_eph_pk.clone().iso_array())
-    end
-
-    valid
+    if not valid then error end
+    Curve25519Public(other_eph_pk.clone().iso_array())
 
   // Must be only called from server
-  fun ref server_derive_secret()? =>
-    _short_term_shared_secret = Sodium.scalar_mult(
-      _eph_sk.string(),
-      (_other_eph_pk as Curve25519Public).string()
+  fun server_derive_secret(
+    id_sk: Ed25519Secret,
+    eph_sk: Curve25519Secret,
+    other_eph_sk: Curve25519Public)
+    : (ByteSeq, ByteSeq)?
+  =>
+
+    let short_term_ss = Sodium.scalar_mult(
+      eph_sk.string(),
+      other_eph_sk.string()
     )?
 
-    _long_term_shared_secret = Sodium.scalar_mult(
-      Sodium.ed25519_sk_to_curve25519(_id_sk)?.string(),
-      (_other_eph_pk as Curve25519Public).string()
+    let long_term_ss = Sodium.scalar_mult(
+      Sodium.ed25519_sk_to_curve25519(id_sk)?.string(),
+      other_eph_sk.string()
     )?
 
-  // TODO(borja): Maybe SHS should already know other_id_pub?
+    (short_term_ss, long_term_ss)
+
   // Must be only called from client
-  fun ref client_derive_secret(other_id_pub: Ed25519Public)? =>
-    _short_term_shared_secret = Sodium.scalar_mult(
-      _eph_sk.string(),
-      (_other_eph_pk as Curve25519Public).string()
+  fun client_derive_secret(
+    eph_sk: Curve25519Secret,
+    other_eph_pk: Curve25519Public,
+    other_id_pub: Ed25519Public)
+    : (ByteSeq, ByteSeq)?
+  =>
+
+    let short_term_ss = Sodium.scalar_mult(
+      eph_sk.string(),
+      other_eph_pk.string()
     )?
 
-    _long_term_shared_secret = Sodium.scalar_mult(
-      _eph_sk.string(),
+    let long_term_ss = Sodium.scalar_mult(
+      eph_sk.string(),
       Sodium.ed25519_pk_to_curve25519(other_id_pub)?.string()
     )?
+
+    (short_term_ss, long_term_ss)

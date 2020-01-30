@@ -14,12 +14,15 @@ use "sodium"
 // we can set a new notify, and pass all the derived keys
 // from it. With an actor server, we don't know its lifetime
 // after the SHS has finished.
+
 class iso _PeerNotify is TCPConnectionNotify
-  let _h: _HandshakeServer
-  new iso create(h: _HandshakeServer) => _h = h
+  let _shs: HandshakeServer
+  new iso create(h: HandshakeServer) =>
+    _shs = consume h
 
   fun ref accepted(conn: TCPConnection ref) =>
-    _h.ready(recover tag conn end)
+    // Create ephemeral keys on connection
+    try conn.expect(_shs.init()?)? else conn.close() end
 
   fun ref received(
     conn: TCPConnection ref,
@@ -27,15 +30,32 @@ class iso _PeerNotify is TCPConnectionNotify
     times: USize)
     : Bool
   =>
-    _h.step(String.from_iso_array(consume data))
+    let msg = String.from_iso_array(consume data)
+    try
+      (let expect, let resp) = _shs.step(consume msg)?
+      if expect == 0 then
+        // TODO(borja): Swap notify
+        return true
+      end
+
+      conn.expect(expect)?
+      conn.write(resp)
+    else
+      Debug.err("Error: _PeerNotify bad SHS")
+      conn.close()
+    end
+
     true
 
   fun ref connect_failed(conn: TCPConnection ref) =>
     None
 
 class iso _PeerListenNotify is TCPListenNotify
-  let _h: _HandshakeServer
-  new iso create(h: _HandshakeServer) => _h = h
+  let _pk: Ed25519Public
+  let _sk: Ed25519Secret
+
+  new iso create(pk: Ed25519Public, sk: Ed25519Secret) =>
+    (_pk, _sk) = (pk, sk)
 
   fun ref listening(listen: TCPListener ref) =>
     try
@@ -43,68 +63,26 @@ class iso _PeerListenNotify is TCPListenNotify
       Debug.out("_PeerListenNotify listening on " + addr + ":" + port)
     end
 
-  fun ref connected(listen: TCPListener ref): TCPConnectionNotify iso^ =>
+  fun ref connected(
+    listen: TCPListener ref)
+    : TCPConnectionNotify iso^
+  =>
     Debug.out("_PeerListenNotify connected")
-    _PeerNotify(_h)
+    _PeerNotify(HandshakeServer(_pk, _sk))
 
   fun ref not_listening(listen: TCPListener ref) =>
     Debug.err("_PeerListenNotify not_listening")
     None
 
-primitive _ClientHello
-primitive _ClientAuth
-type _ServerFSM is (_ClientHello | _ClientAuth)
-
-primitive _ServerHello
-primitive _ServerAccept
-type _ClientFSM is (_ServerHello | _ServerAccept)
-
-// TODO(borja): Reconsider
-actor _HandshakeServer
-  let _self_pk: Ed25519Public
-  let _self_sk: Ed25519Secret
-
-  var _h: (Handshake | None) = None
-  var _state: _ServerFSM = _ClientHello
-  var _socket: (TCPConnection | None) = None
-
-  new create(pk: Ed25519Public, sk: Ed25519Secret) =>
-    _self_pk = pk
-    _self_sk = sk
-
-  be ready(socket: TCPConnection) =>
-    Debug.out("_HandshakeServer ready")
-    _socket = socket
-
-  be step(msg: String) =>
-    try
-      match _state
-      | _ClientHello =>
-        _do_hello(msg)?
-        Debug.out("_HandshakeServer valid client_hello")
-        _state = _ClientAuth
-
-      | _ClientAuth =>
-        Debug.out("_HandshakeServer _ClientAuth?")
-      end
-    else
-      Debug.err("Error: _HandshakeServer bad handshake")
-      _close()
-    end
-
-  fun ref _do_hello(msg: String)? =>
-    (let eph_pk, let eph_sk) = Sodium.curve25519_pair()?
-    let h = Handshake(_self_pk, _self_sk, eph_pk, eph_sk)
-    if not h.hello_verify(msg) then error end
-
-    (_socket as TCPConnection).write(h.hello_challenge()?)
-    h.server_derive_secret()?
-    _h = h
-
-  fun _close() =>
-    try (_socket as TCPConnection).dispose() end
-
 actor PeerServer
-  let _l: TCPListener
-  new create(auth: NetAuth, pk: Ed25519Public, sk: Ed25519Secret, port: String) =>
-    _l = TCPListener(auth, _PeerListenNotify(_HandshakeServer(pk, sk)), "", port)
+  new create(
+    auth: NetAuth,
+    pk: Ed25519Public,
+    sk: Ed25519Secret,
+    port: String)
+  =>
+    TCPListener(
+      auth,
+      _PeerListenNotify(pk, sk),
+      "",
+      port)
