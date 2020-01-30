@@ -2,6 +2,18 @@ use "net"
 use "debug"
 use "sodium"
 
+// SHS/RPC Ideas:
+// On starting, our TCP server uses a Handshake notify, that performs the SHS mechanism.
+// When/if the handshake succeeds, it changes the notify: the new one is a nested notify.
+// The outter layer performs the box stream framing and enc/decryption.
+// The next layer is the RPC mechanism, which also handles framing.
+// The RPC layer can either be the final layer, or delegate RPC header parsing to another notifier.
+
+// Consider doing SHS inside notify, instead of using
+// a different actor. This way, when we finish the SHS,
+// we can set a new notify, and pass all the derived keys
+// from it. With an actor server, we don't know its lifetime
+// after the SHS has finished.
 class iso _PeerNotify is TCPConnectionNotify
   let _h: _HandshakeServer
   new iso create(h: _HandshakeServer) => _h = h
@@ -47,6 +59,7 @@ primitive _ServerHello
 primitive _ServerAccept
 type _ClientFSM is (_ServerHello | _ServerAccept)
 
+// TODO(borja): Reconsider
 actor _HandshakeServer
   let _self_pk: Ed25519Public
   let _self_sk: Ed25519Secret

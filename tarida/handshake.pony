@@ -31,6 +31,10 @@ class Handshake
     let auth = Sodium.auth_msg(_eph_pk.string(), _network_id)?
     recover String.create(auth.size() + _eph_pk.size()).>append(auth).>append(_eph_pk) end
 
+  // TODO(borja): Should we store state inside this class?
+  // Maybe it could lead to wrong usage, if, for example, a hello_verify returns
+  // false, but we keep using it afterwards. As soon as the auth fails, we should
+  // discard our ephemeral keys, and start from scratch.
   fun ref hello_verify(msg: String): Bool =>
     if msg.size() != 64 then false end
 
