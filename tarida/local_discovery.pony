@@ -163,5 +163,15 @@ actor Discovery
       let peer_port = matches(2)?
       let peer_pub = matches(3)?
 
-      Debug.out("Discovery found peer " + maybe_ann)
+      // Ignore self
+      if peer_pub == _self_pk then
+        return
+      end
+
+      Debug.out("Discovery found peer "
+                + (consume peer_ip)
+                + ":"
+                + (consume peer_port)
+                + "~"
+                + (consume peer_pub))
     end
