@@ -38,6 +38,8 @@ class Handshake
   // Maybe it could lead to wrong usage, if, for example, a hello_verify returns
   // false, but we keep using it afterwards. As soon as the auth fails, we should
   // discard our ephemeral keys, and start from scratch.
+  // This could be done by making Handshake a primitive. This operation should
+  // then return either an optional ephemeral public key, or None (error)
   fun ref hello_verify(msg: String): Bool =>
     if msg.size() != 64 then false end
 

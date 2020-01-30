@@ -157,6 +157,7 @@ actor Discovery
 
   be _peer(maybe_ann: String) =>
     try
+      // FIXME(borja): Don't allocate the regex on every peer
       let ann_regex = Regex("^net:(.+):(\\d+)~shs:(.+)$")?
       let ann = maybe_ann.split(";")(0)?
       let matches = ann_regex(ann)?

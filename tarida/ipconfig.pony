@@ -25,6 +25,7 @@ class iso _Client is ProcessNotify
     _err = cb_err
 
   fun ref stdout(proc: ProcessMonitor ref, data: Array[U8] iso) =>
+    // FIXME(borja): call _err if string is empty, or figure out if ipconfig failed
     let s = String.from_iso_array(consume data)
     s.strip()
     _cb.apply(consume s)
