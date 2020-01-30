@@ -98,6 +98,7 @@ actor Discovery
 
   var _self_ip: (String | None) = None
   let _self_port: String
+  let _peer_port: String
   var _broadcast_addr: (NetAddress | None) = None
   var _announcement: (String | None) = None
 
@@ -108,12 +109,13 @@ actor Discovery
   let _timer_wheel: Timers = Timers
   var _timer_handle: (Timer tag | None) = None
 
-  new create(auth: AmbientAuth, iface: String, port: String, pk: String) =>
+  new create(auth: AmbientAuth, pk: String, iface: String, port: String, peer_port: String) =>
     _auth = NetAuth(auth)
     _self_port = port
+    _peer_port = peer_port
     _self_pk = pk
 
-    _recv_socket = UDPSocket(_auth, _BroadcastReceiver(_auth, this), "", port)
+    _recv_socket = UDPSocket(_auth, _BroadcastReceiver(_auth, this), "", _self_port)
     IPConfig(
       auth,
       iface,
@@ -126,11 +128,11 @@ actor Discovery
     _self_ip = self_ip
     _snd_socket = UDPSocket(_auth, _BroadcastSender(this), self_ip, _self_port)
     _announcement = recover val
-      String.create(4 + self_ip.size() + 1 + _self_port.size() + 5 + _self_pk.size())
+      String.create(4 + self_ip.size() + 1 + _peer_port.size() + 5 + _self_pk.size())
         .>append("net:")
         .>append(self_ip)
         .>push(':')
-        .>append(_self_port)
+        .>append(_peer_port)
         .>append("~shs:")
         .>append(_self_pk)
     end
