@@ -5,9 +5,71 @@ primitive _ClientHello
 primitive _ClientAuth
 type _ServerFSM is (_ClientHello | _ClientAuth)
 
+primitive _Init
 primitive _ServerHello
 primitive _ServerAccept
-type _ClientFSM is (_ServerHello | _ServerAccept)
+type _ClientFSM is (_Init | _ServerHello | _ServerAccept)
+
+// TODO(borja): Handle code duplication w/ https://patterns.ponylang.io/code-sharing/mixin.html
+class iso HandshakeClient
+  var _state: _ClientFSM
+
+  let _id_pk: Ed25519Public
+  let _id_sk: Ed25519Secret
+  let _other_id_pk: Ed25519Public
+
+  var _eph_pk: (Curve25519Public | None) = None
+  var _eph_sk: (Curve25519Secret | None) = None
+
+  var _other_eph_pk: (Curve25519Public | None) = None
+
+  var _short_term_shared_secret: (ByteSeq | None) = None
+  var _long_term_shared_secret: (ByteSeq | None) = None
+
+  new iso create(pk: Ed25519Public, sk: Ed25519Secret, other_id_pk: Ed25519Public) =>
+    _id_pk = pk
+    _id_sk = sk
+    _other_id_pk = other_id_pk
+    _state = _Init
+
+  fun ref step(msg: String): (USize, String)? =>
+    match _state
+    | _Init =>
+      Debug.out("HandshakeClient _Init")
+      _state = _ServerHello
+      (64, _client_hello()?)
+
+    | _ServerHello =>
+      Debug.out("HandshakeClient _ServerHello")
+      _state = _ServerAccept
+      (80, _do_verify_hello(msg)?)
+
+    | _ServerAccept =>
+      Debug.out("HandshakeClient _ServerAccept")
+      (0, "")
+    end
+
+  fun ref _client_hello(): String? =>
+    let eph_pair = Sodium.curve25519_pair()?
+    (_eph_pk, _eph_sk) = eph_pair
+    Handshake.hello_challenge(eph_pair._1)?
+
+  fun ref _do_verify_hello(msg: String): String? =>
+    let other_eph_pk = Handshake.hello_verify(msg)?
+    // FIXME(borja): Compute next client message
+    let resp = Handshake.hello_challenge(_eph_pk as Curve25519Public)?
+    let secrets = Handshake.client_derive_secret(
+      _eph_sk as Curve25519Secret,
+      other_eph_pk, // Notice server's public key here
+      _other_id_pk
+    )?
+
+    _other_eph_pk = other_eph_pk
+    _short_term_shared_secret = secrets._1
+    _long_term_shared_secret = secrets._2
+
+    resp
+
 
 class iso HandshakeServer
   var _state: _ServerFSM
@@ -40,7 +102,8 @@ class iso HandshakeServer
     | _ClientHello =>
       Debug.out("HandshakeServer _ClientHello")
       _state = _ClientAuth
-      (64, _do_hello(msg)?)
+      (112, _do_hello(msg)?)
+
     | _ClientAuth =>
       Debug.out("HandshakeServer _ClientAuth?")
       (0, "")
