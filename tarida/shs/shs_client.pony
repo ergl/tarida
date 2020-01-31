@@ -49,11 +49,11 @@ class iso HandshakeClient
   fun ref _client_hello(): String? =>
     let eph_pair = Sodium.curve25519_pair()?
     (_eph_pk, _eph_sk) = eph_pair
-    Handshake.hello_challenge(eph_pair._1)?
+    _Handshake.hello_challenge(eph_pair._1)?
 
   fun ref _verify_hello(msg: String)? =>
-    let other_eph_pk = Handshake.hello_verify(msg)?
-    let secrets = Handshake.client_derive_secret(
+    let other_eph_pk = _Handshake.hello_verify(msg)?
+    let secrets = _Handshake.client_derive_secret(
       _eph_sk as Curve25519Secret,
       other_eph_pk, // Notice server's public key here
       _other_id_pk
@@ -67,5 +67,5 @@ class iso HandshakeClient
     let short_term_ss = _short_term_shared_secret as ByteSeq
     let long_term_ss = _long_term_shared_secret as ByteSeq
 
-    let detached_sign = Handshake.client_detached_sign(_other_id_pk, _id_sk, short_term_ss)?
-    Handshake.client_auth(detached_sign, _id_pk, short_term_ss, long_term_ss)?
+    let detached_sign = _Handshake.client_detached_sign(_other_id_pk, _id_sk, short_term_ss)?
+    _Handshake.client_auth(detached_sign, _id_pk, short_term_ss, long_term_ss)?

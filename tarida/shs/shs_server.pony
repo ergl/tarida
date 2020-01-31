@@ -44,9 +44,9 @@ class iso HandshakeServer
     end
 
   fun ref _do_hello(msg: String): String? =>
-    let other_eph_pk = Handshake.hello_verify(msg)?
-    let resp = Handshake.hello_challenge(_eph_pk as Curve25519Public)?
-    let secrets = Handshake.server_derive_secret(
+    let other_eph_pk = _Handshake.hello_verify(msg)?
+    let resp = _Handshake.hello_challenge(_eph_pk as Curve25519Public)?
+    let secrets = _Handshake.server_derive_secret(
       _id_sk,
       _eph_sk as Curve25519Secret,
       other_eph_pk

@@ -2,9 +2,7 @@ use "debug"
 use "crypto"
 use "package:../sodium"
 
-
-
-primitive Handshake
+primitive _Handshake
   fun network_id(): Array[U8] val =>
     [as U8: 0xd4; 0xa1; 0xcb; 0x88
             0xa6; 0x6f; 0x02; 0xf8
