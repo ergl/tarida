@@ -59,18 +59,18 @@ primitive _Handshake
   fun server_derive_secret(
     id_sk: Ed25519Secret,
     eph_sk: Curve25519Secret,
-    other_eph_sk: Curve25519Public)
+    other_eph_pk: Curve25519Public)
     : (_ShortTermSS, _LongTermSS)?
   =>
 
     let short_term_ss = Sodium.scalar_mult(
       eph_sk.string(),
-      other_eph_sk.string()
+      other_eph_pk.string()
     )?
 
     let long_term_ss = Sodium.scalar_mult(
       Sodium.ed25519_sk_to_curve25519(id_sk)?.string(),
-      other_eph_sk.string()
+      other_eph_pk.string()
     )?
 
     (_ShortTermSS(short_term_ss), _LongTermSS(long_term_ss))
@@ -79,7 +79,7 @@ primitive _Handshake
   fun client_derive_secret(
     eph_sk: Curve25519Secret,
     other_eph_pk: Curve25519Public,
-    other_id_pub: Ed25519Public)
+    other_id_pk: Ed25519Public)
     : (_ShortTermSS, _LongTermSS)?
   =>
 
@@ -90,7 +90,7 @@ primitive _Handshake
 
     let long_term_ss = Sodium.scalar_mult(
       eph_sk.string(),
-      Sodium.ed25519_pk_to_curve25519(other_id_pub)?.string()
+      Sodium.ed25519_pk_to_curve25519(other_id_pk)?.string()
     )?
 
     (_ShortTermSS(short_term_ss), _LongTermSS(long_term_ss))
@@ -138,3 +138,45 @@ primitive _Handshake
     // OK to use since this is the only time we encrypt this message
     let nonce = recover Array[U8].init(0, 24) end
     Sodium.box_easy(consume msg, consume key, consume nonce)?
+
+  fun client_auth_verify(
+    enc: String,
+    id_pk: Ed25519Public,
+    short_term_ss: _ShortTermSS,
+    long_term_ss: _LongTermSS)
+    : (_ClientDetachedSign, Ed25519Public)?
+  =>
+
+    let net_id = network_id()
+    // OK to use since this is the only time we encrypt this message
+    let nonce = recover Array[U8].init(0, 24) end
+    let key_raw = recover
+      String.create(net_id.size() + short_term_ss.size() + long_term_ss.size())
+            .>append(String.from_array(net_id))
+            .>append(short_term_ss.string())
+            .>append(long_term_ss.string())
+    end
+    let key = SHA256(consume key_raw)
+
+    let plain_text = Sodium.box_easy_open(enc, consume key, consume nonce)?
+    if plain_text.size() != 96 then error end // Spec
+
+    let sign_detached = plain_text.trim(0, 63)
+    let client_id_pk = plain_text.trim(64) // until the end
+
+    let hash_ss = SHA256(short_term_ss.string())
+    let msg = recover
+      String.create(net_id.size() + id_pk.size() + hash_ss.size())
+            .>append(String.from_array(net_id))
+            .>append(id_pk.string())
+            .>append(String.from_array(hash_ss))
+    end
+
+    let valid = Sodium.sign_detached_verify(
+      where sig = sign_detached,
+      msg = consume msg,
+      key = client_id_pk
+    )
+
+    if not valid then error end
+    (_ClientDetachedSign(sign_detached), Ed25519Public.from_string(client_id_pk))

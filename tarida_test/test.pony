@@ -31,16 +31,24 @@ class iso _TestSHS is UnitTest
     (_client_public, _client_secret) = (cpk, csk)
 
   fun ref apply(h: TestHelper) => try
+    // client.send(hello)
     (let cl_expect_0, let client_hello) = (_shs_client as HandshakeClient).step("")?
     h.assert_eq[USize](64, cl_expect_0)
     h.assert_eq[USize](64, client_hello.size())
 
+    // server.recv(hello); server.send(hello)
     (let s_expect_0, let server_hello) = (_shs_server as HandshakeServer).step(client_hello)?
     h.assert_eq[USize](112, s_expect_0)
     h.assert_eq[USize](64, server_hello.size())
 
+    // client.recv(hello); client.send(client_auth)
     (let cl_expect_1, let client_auth) = (_shs_client as HandshakeClient).step(server_hello)?
     h.assert_eq[USize](80, cl_expect_1)
     h.assert_eq[USize](112, client_auth.size())
+
+    // serbver.recv(client_auth); server.send(server_accept)
+    (let s_expect_1, let server_accept) = (_shs_server as HandshakeServer).step(client_auth)?
+    h.assert_eq[USize](0, s_expect_1) // Server is done
+    h.assert_eq[USize](80, server_accept.size())
 
   else h.fail() end

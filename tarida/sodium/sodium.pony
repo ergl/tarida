@@ -49,6 +49,11 @@ use @crypto_sign_detached[I32](sig: Pointer[U8] tag, siglen: Pointer[ULong] ref,
                                m: Pointer[U8] tag, mlen: ULong,
                                sk: Pointer[U8] tag)
 
+// Verify a signature crafted with crypto_sign_detached
+use @crypto_sign_verify_detached[I32](sig: Pointer[U8] tag,
+                                      m: Pointer[U8] tag, mlen: ULong,
+                                      pk: Pointer[U8] tag)
+
 use @crypto_secretbox_macbytes[USize]()
 use @crypto_secretbox_keybytes[USize]()
 use @crypto_secretbox_noncebytes[USize]()
@@ -69,6 +74,7 @@ use @crypto_secretbox_open_easy[I32](m: Pointer[U8] tag,
                                      nonce: Pointer[U8] tag,
                                      key: Pointer[U8] tag)
 
+// TODO(borja): Consider changing impl to a String, easier to use
 interface val _OpaqueBuffer
   fun _get_inner(): Array[U8] val
   fun apply(i: USize): U8? => _get_inner()(i)?
@@ -80,6 +86,7 @@ interface val _OpaqueBuffer
 class val Ed25519Public is _OpaqueBuffer
   let _inner: Array[U8] val
   new val create(from: Array[U8] iso) => _inner = consume from
+  new val from_string(from: String) => _inner = from.array()
   fun _get_inner(): Array[U8] val => _inner
 
 class val Ed25519Secret is _OpaqueBuffer
@@ -187,6 +194,12 @@ primitive Sodium
     if \unlikely\ ret != 0 then error end
 
     (String.from_array(consume signature), signature_len)
+
+  fun sign_detached_verify(sig: ByteSeq, msg: ByteSeq, key: ByteSeq): Bool =>
+    0 == @crypto_sign_verify_detached(sig.cpointer(),
+                                      msg.cpointer(),
+                                      msg.size().ulong(),
+                                      key.cpointer())
 
   fun box_easy(msg: ByteSeq, key: ByteSeq, nonce: ByteSeq): String? =>
     if key.size() != @crypto_secretbox_keybytes() then

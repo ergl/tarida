@@ -32,14 +32,14 @@ class iso HandshakeClient
   fun ref step(msg: String): (USize, String)? =>
     match _state
     | _Init =>
-      Debug.out("HandshakeClient _Init")
       _state = _ServerHello
+      Debug.out("HandshakeClient _Init")
       (64, _client_hello()?)
 
     | _ServerHello =>
-      Debug.out("HandshakeClient _ServerHello")
-      _state = _ServerAccept
       _verify_hello(msg)?
+      _state = _ServerAccept
+      Debug.out("HandshakeClient _ServerHello")
       (80, _client_auth()?)
 
     | _ServerAccept =>
