@@ -18,6 +18,11 @@ class val _LongTermServerSS is _OpaqueString
   new val create(from: String val) => _inner = from
   fun _get_inner(): String => _inner
 
+class val _LongTermClientSS is _OpaqueString
+  let _inner: String val
+  new val create(from: String val) => _inner = from
+  fun _get_inner(): String => _inner
+
 class val _ClientDetachedSign is _OpaqueString
   let _inner: String val
   new val create(from: String val) => _inner = from
@@ -56,7 +61,7 @@ primitive _Handshake
     Curve25519Public(other_eph_pk.clone().iso_array())
 
   // Must be only called from server
-  fun server_derive_secret(
+  fun server_derive_secret_1(
     id_sk: Ed25519Secret,
     eph_sk: Curve25519Secret,
     other_eph_pk: Curve25519Public)
@@ -76,7 +81,7 @@ primitive _Handshake
     (_ShortTermSS(short_term_ss), _LongTermServerSS(long_term_ss))
 
   // Must be only called from client
-  fun client_derive_secret(
+  fun client_derive_secret_1(
     eph_sk: Curve25519Secret,
     other_eph_pk: Curve25519Public,
     other_id_pk: Ed25519Public)
@@ -180,3 +185,15 @@ primitive _Handshake
 
     if not valid then error end
     (_ClientDetachedSign(sign_detached), Ed25519Public.from_string(client_id_pk))
+
+  fun client_derive_secret_2(id_sk: Ed25519Secret, other_eph_pk: Curve25519Public): _LongTermClientSS? =>
+    _LongTermClientSS(Sodium.scalar_mult(
+      Sodium.ed25519_sk_to_curve25519(id_sk)?.string(),
+      other_eph_pk.string()
+    )?)
+
+  fun server_derive_secret_2(eph_sk: Curve25519Secret, other_id_pk: Ed25519Public): _LongTermClientSS? =>
+    _LongTermClientSS(Sodium.scalar_mult(
+      eph_sk.string(),
+      Sodium.ed25519_pk_to_curve25519(other_id_pk)?.string()
+    )?)

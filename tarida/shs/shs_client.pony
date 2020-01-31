@@ -20,7 +20,8 @@ class iso HandshakeClient
   var _other_eph_pk: (Curve25519Public | None) = None
 
   var _short_term_shared_secret: (_ShortTermSS | None) = None
-  var _long_term_shared_secret: (_LongTermServerSS | None) = None
+  var _long_term_shared_secret_1: (_LongTermServerSS | None) = None
+  var _long_term_shared_secret_2: (_LongTermClientSS | None) = None
   var _self_detached_sign: (_ClientDetachedSign | None) = None
 
   new iso create(pk: Ed25519Public, sk: Ed25519Secret, other_id_pk: Ed25519Public) =>
@@ -54,7 +55,7 @@ class iso HandshakeClient
 
   fun ref _verify_hello(msg: String)? =>
     let other_eph_pk = _Handshake.hello_verify(msg)?
-    let secrets = _Handshake.client_derive_secret(
+    let secrets = _Handshake.client_derive_secret_1(
       _eph_sk as Curve25519Secret,
       other_eph_pk, // Notice server's public key here
       _other_id_pk
@@ -62,11 +63,16 @@ class iso HandshakeClient
 
     _other_eph_pk = other_eph_pk
     _short_term_shared_secret = secrets._1
-    _long_term_shared_secret = secrets._2
+    _long_term_shared_secret_1 = secrets._2
+    // Inline second secret derivation here
+    _long_term_shared_secret_2 = _Handshake.client_derive_secret_2(
+      _id_sk,
+      other_eph_pk
+    )?
 
   fun ref _client_auth(): String? =>
     let short_term_ss = _short_term_shared_secret as _ShortTermSS
-    let long_term_ss = _long_term_shared_secret as _LongTermServerSS
+    let long_term_ss = _long_term_shared_secret_1 as _LongTermServerSS
 
     let detached_sign = _Handshake.client_detached_sign(_other_id_pk, _id_sk, short_term_ss)?
     _self_detached_sign = detached_sign
