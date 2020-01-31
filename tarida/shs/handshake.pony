@@ -28,6 +28,11 @@ class val _ClientDetachedSign is _OpaqueString
   new val create(from: String val) => _inner = from
   fun _get_inner(): String => _inner
 
+class val _ServerDetachedSign is _OpaqueString
+  let _inner: String val
+  new val create(from: String val) => _inner = from
+  fun _get_inner(): String => _inner
+
 primitive _Handshake
   fun network_id(): Array[U8] val =>
     [as U8: 0xd4; 0xa1; 0xcb; 0x88
@@ -169,12 +174,12 @@ primitive _Handshake
     let sign_detached = plain_text.trim(0, 63)
     let client_id_pk = plain_text.trim(64) // until the end
 
-    let hash_ss = SHA256(short_term_ss.string())
+    let hashed_ss = SHA256(short_term_ss.string())
     let msg = recover
-      String.create(net_id.size() + id_pk.size() + hash_ss.size())
+      String.create(net_id.size() + id_pk.size() + hashed_ss.size())
             .>append(String.from_array(net_id))
             .>append(id_pk.string())
-            .>append(String.from_array(hash_ss))
+            .>append(String.from_array(hashed_ss))
     end
 
     let valid = Sodium.sign_detached_verify(
@@ -197,3 +202,47 @@ primitive _Handshake
       eph_sk.string(),
       Sodium.ed25519_pk_to_curve25519(other_id_pk)?.string()
     )?)
+
+  fun server_detached_sign(
+    server_id_sk: Ed25519Secret,
+    client_id_pk: Ed25519Public,
+    client_sign: _ClientDetachedSign,
+    short_term_ss: _ShortTermSS)
+    : _ServerDetachedSign?
+  =>
+
+    let net_id = network_id()
+    let hashed_ss = SHA256(short_term_ss.string())
+    let msg_size = net_id.size() + client_sign.size() + client_id_pk.size() + hashed_ss.size()
+    let msg = recover
+      String.create(msg_size)
+            .>append(String.from_array(net_id))
+            .>append(client_sign.string())
+            .>append(client_id_pk.string())
+            .>append(hashed_ss)
+    end
+
+    (let detached, _) = Sodium.sign_detached(consume msg, server_id_sk.string())?
+    _ServerDetachedSign(detached)
+
+  fun server_accept(
+    server_sign: _ServerDetachedSign,
+    short_term_ss: _ShortTermSS,
+    long_term_ss_1: _LongTermServerSS,
+    long_term_ss_2: _LongTermClientSS)
+    : String?
+  =>
+
+    let net_id = network_id()
+    let key_size = net_id.size() + short_term_ss.size() + long_term_ss_1.size() + long_term_ss_2.size()
+    let raw_key = recover
+      String.create(key_size)
+            .>append(String.from_array(net_id))
+            .>append(short_term_ss.string())
+            .>append(long_term_ss_1.string())
+            .>append(long_term_ss_2.string())
+    end
+    let key = SHA256(consume raw_key)
+    // OK to use since this is the only time we encrypt this message
+    let nonce = recover Array[U8].init(0, 24) end
+    Sodium.box_easy(server_sign.string(), consume key, consume nonce)?

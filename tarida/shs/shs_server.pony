@@ -22,7 +22,9 @@ class iso HandshakeServer
   var _short_term_shared_secret: (_ShortTermSS | None) = None
   var _long_term_shared_secret_1: (_LongTermServerSS | None) = None
   var _long_term_shared_secret_2: (_LongTermClientSS | None) = None
+
   var _client_detached_sign: (_ClientDetachedSign | None) = None
+  var _server_detached_sign: (_ServerDetachedSign | None) = None
 
   new iso create(pk: Ed25519Public, sk: Ed25519Secret) =>
     _id_pk = pk
@@ -48,7 +50,7 @@ class iso HandshakeServer
       _verify_client_auth(msg)?
       _state = _Done
       Debug.out("HandshakeServer _ClientAuth")
-      (0, "") // TODO
+      (0, _server_accept()?)
     | _Done => error // Shouldn't reuse the server
     end
 
@@ -64,7 +66,7 @@ class iso HandshakeServer
     _short_term_shared_secret = secrets._1
     _long_term_shared_secret_1 = secrets._2
 
-  fun ref _server_hello(): String? =>
+  fun _server_hello(): String? =>
     _Handshake.hello_challenge(_eph_pk as Curve25519Public)?
 
   fun ref _verify_client_auth(msg: String)? =>
@@ -81,4 +83,24 @@ class iso HandshakeServer
     _long_term_shared_secret_2 = _Handshake.server_derive_secret_2(
       _eph_sk as Curve25519Secret,
       _other_id_pk as Ed25519Public
+    )?
+
+  fun ref _server_accept(): String? =>
+    let short_term_ss = _short_term_shared_secret as _ShortTermSS
+    let sign = _Handshake.server_detached_sign(
+        _id_sk,
+        _other_id_pk as Ed25519Public,
+        _client_detached_sign as _ClientDetachedSign,
+        short_term_ss
+    )?
+
+    _server_detached_sign = sign
+
+    let long_term_ss_1 = _long_term_shared_secret_1 as _LongTermServerSS
+    let long_term_ss_2 = _long_term_shared_secret_2 as _LongTermClientSS
+    _Handshake.server_accept(
+      sign,
+      short_term_ss,
+      long_term_ss_1,
+      long_term_ss_2
     )?
