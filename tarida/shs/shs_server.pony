@@ -54,6 +54,23 @@ class iso HandshakeServer
     | _ServerDone => error // Shouldn't reuse the server
     end
 
+  fun _full_secret(): _BoxKeys? =>
+    if _state isnt _ServerDone then error end
+
+    let secret = _Handshake.make_secret(
+      _short_term_shared_secret as _ShortTermSS,
+      _long_term_shared_secret_1 as _LongTermServerSS,
+      _long_term_shared_secret_2 as _LongTermClientSS
+    )?
+
+    _Handshake.make_box_keys(
+      secret,
+      _id_pk,
+      _other_id_pk as Ed25519Public,
+      _eph_pk as Curve25519Public,
+      _other_eph_pk as Curve25519Public
+    )?
+
   fun ref _verify_hello(msg: String)? =>
     let other_eph_pk = _Handshake.hello_verify(msg)?
     let secrets = _Handshake.server_derive_secret_1(

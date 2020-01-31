@@ -33,6 +33,34 @@ class val _ServerDetachedSign is _OpaqueString
   new val create(from: String val) => _inner = from
   fun _get_inner(): String => _inner
 
+class val _BareBoxStreamSecret is _OpaqueString
+  let _inner: String val
+  new val create(from: String val) => _inner = from
+  fun _get_inner(): String => _inner
+
+class val _BoxStreamEncKey is _OpaqueString
+  let _inner: String val
+  new val create(from: String val) => _inner = from
+  fun _get_inner(): String => _inner
+
+class val _BoxStreamEncNonce is _OpaqueString
+  let _inner: String val
+  new val create(from: String val) => _inner = from
+  fun _get_inner(): String => _inner
+
+class val _BoxStreamDecKey is _OpaqueString
+  let _inner: String val
+  new val create(from: String val) => _inner = from
+  fun _get_inner(): String => _inner
+
+class val _BoxStreamDecNonce is _OpaqueString
+  let _inner: String val
+  new val create(from: String val) => _inner = from
+  fun _get_inner(): String => _inner
+
+type _BoxKeys is (_BoxStreamEncKey, _BoxStreamEncNonce, _BoxStreamDecKey, _BoxStreamDecNonce)
+
+// TODO(borja): Plug integration tests from https://github.com/AljoschaMeyer/shs1-test
 primitive _Handshake
   fun network_id(): Array[U8] val =>
     [as U8: 0xd4; 0xa1; 0xcb; 0x88
@@ -291,3 +319,56 @@ primitive _Handshake
 
     if not valid then error end
     _ServerDetachedSign(server_sign)
+
+  fun make_secret(
+    ss_1: _ShortTermSS,
+    ss_2: _LongTermServerSS,
+    ss_3: _LongTermClientSS)
+    : _BareBoxStreamSecret?
+  =>
+
+    let net_id = network_id()
+    let msg_size = net_id.size() + ss_1.size() + ss_2.size() + ss_3.size()
+    if msg_size != 1024 then error end // Spec
+    let msg = recover
+      String.create(msg_size)
+            .>append(ss_1.string())
+            .>append(ss_2.string())
+            .>append(ss_3.string())
+    end
+
+    _BareBoxStreamSecret(String.from_array(SHA256(SHA256(consume msg))))
+
+  fun make_box_keys(
+    secret: _BareBoxStreamSecret,
+    self_id_pk: Ed25519Public,
+    other_id_pk: Ed25519Public,
+    self_eph_pk: Curve25519Public,
+    other_eph_pk: Curve25519Public)
+    : _BoxKeys?
+  =>
+
+    let net_id = network_id()
+    let enc_k = String.from_array(SHA256(recover
+      String.create(secret.size() + other_id_pk.size())
+            .>append(secret.string())
+            .>append(other_id_pk.string())
+    end))
+
+    let enc_nonce = Sodium.auth_msg(
+      other_eph_pk.string().trim(0, 23),
+      String.from_array(net_id)
+    )?
+
+    let dec_k = String.from_array(SHA256(recover
+      String.create(secret.size() + self_id_pk.size())
+            .>append(secret.string())
+            .>append(self_id_pk.string())
+    end))
+
+    let dec_nonce = Sodium.auth_msg(
+      self_eph_pk.string().trim(0, 23),
+      String.from_array(net_id)
+    )?
+
+    (_BoxStreamEncKey(enc_k), _BoxStreamEncNonce(enc_nonce), _BoxStreamDecKey(dec_k), _BoxStreamDecNonce(dec_nonce))

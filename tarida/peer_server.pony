@@ -36,6 +36,7 @@ class iso _PeerNotify is TCPConnectionNotify
       (let expect, let resp) = _shs.step(consume msg)?
       if expect == 0 then
         // TODO(borja): Swap notify
+        Debug.out("Handshake complete")
         return true
       end
 

@@ -54,6 +54,23 @@ class iso HandshakeClient
     | _ClientDone => error // Shouldn't reuse the client
     end
 
+  fun _full_secret(): _BoxKeys? =>
+    if _state isnt _ClientDone then error end
+
+    let secret = _Handshake.make_secret(
+      _short_term_shared_secret as _ShortTermSS,
+      _long_term_shared_secret_1 as _LongTermServerSS,
+      _long_term_shared_secret_2 as _LongTermClientSS
+    )?
+
+    _Handshake.make_box_keys(
+      secret,
+      _id_pk,
+      _other_id_pk,
+      _eph_pk as Curve25519Public,
+      _other_eph_pk as Curve25519Public
+    )?
+
   fun ref _client_hello(): String? =>
     let eph_pair = Sodium.curve25519_pair()?
     (_eph_pk, _eph_sk) = eph_pair
