@@ -69,41 +69,33 @@ use @crypto_secretbox_open_easy[I32](m: Pointer[U8] tag,
                                      nonce: Pointer[U8] tag,
                                      key: Pointer[U8] tag)
 
-class val Ed25519Public
-  let _inner: Array[U8] val
-  new val create(from: Array[U8] iso) => _inner = consume from
-  fun apply(i: USize): U8? => _inner(i)?
-  fun values(): Iterator[U8] ref^ => _inner.values()
-  fun cpointer(): Pointer[U8] tag => _inner.cpointer()
-  fun size(): USize => _inner.size()
-  fun string(): String => String.from_array(_inner)
+interface val _OpaqueBuffer
+  fun _get_inner(): Array[U8] val
+  fun apply(i: USize): U8? => _get_inner()(i)?
+  fun values(): Iterator[U8] ref^ => _get_inner().values()
+  fun cpointer(): Pointer[U8] tag => _get_inner().cpointer()
+  fun size(): USize => _get_inner().size()
+  fun string(): String => String.from_array(_get_inner())
 
-class val Ed25519Secret
+class val Ed25519Public is _OpaqueBuffer
   let _inner: Array[U8] val
   new val create(from: Array[U8] iso) => _inner = consume from
-  fun apply(i: USize): U8? => _inner(i)?
-  fun values(): Iterator[U8] ref^ => _inner.values()
-  fun cpointer(): Pointer[U8] tag => _inner.cpointer()
-  fun size(): USize => _inner.size()
-  fun string(): String => String.from_array(_inner)
+  fun _get_inner(): Array[U8] val => _inner
 
-class val Curve25519Public
+class val Ed25519Secret is _OpaqueBuffer
   let _inner: Array[U8] val
   new val create(from: Array[U8] iso) => _inner = consume from
-  fun apply(i: USize): U8? => _inner(i)?
-  fun values(): Iterator[U8] ref^ => _inner.values()
-  fun cpointer(): Pointer[U8] tag => _inner.cpointer()
-  fun size(): USize => _inner.size()
-  fun string(): String => String.from_array(_inner)
+  fun _get_inner(): Array[U8] val => _inner
 
-class val Curve25519Secret
+class val Curve25519Public is _OpaqueBuffer
   let _inner: Array[U8] val
   new val create(from: Array[U8] iso) => _inner = consume from
-  fun apply(i: USize): U8? => _inner(i)?
-  fun values(): Iterator[U8] ref^ => _inner.values()
-  fun cpointer(): Pointer[U8] tag => _inner.cpointer()
-  fun size(): USize => _inner.size()
-  fun string(): String => String.from_array(_inner)
+  fun _get_inner(): Array[U8] val => _inner
+
+class val Curve25519Secret is _OpaqueBuffer
+  let _inner: Array[U8] val
+  new val create(from: Array[U8] iso) => _inner = consume from
+  fun _get_inner(): Array[U8] val => _inner
 
 primitive Sodium
   fun _make_buffer(len: USize): Array[U8] iso^ =>
@@ -160,12 +152,12 @@ primitive Sodium
                              msg.size().ulong(),
                              key.cpointer())
 
-  fun scalar_mult(scalar: ByteSeq, point: ByteSeq): ByteSeq? =>
+  fun scalar_mult(scalar: ByteSeq, point: ByteSeq): String? =>
     let q = _make_buffer(@crypto_scalarmult_bytes())
     let ret = @crypto_scalarmult(q.cpointer(), scalar.cpointer(), point.cpointer())
     if \unlikely\ ret != 0 then error end
 
-    q
+    String.from_array(consume q)
 
   fun ed25519_pk_to_curve25519(pk: Ed25519Public): Curve25519Public? =>
     let curve_pk = _make_buffer(@crypto_scalarmult_curve25519_bytes())
