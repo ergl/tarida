@@ -215,9 +215,12 @@ primitive Sodium
       error
     end
 
-    // enc is of at least @crypto_secretbox_macbytes() + original msg size,
-    // so overshoot it, just in case
-    let msg = _make_buffer(enc.size())
+    if enc.size() < @crypto_secretbox_macbytes() then
+      error // Msg doesn't contain anything
+    end
+
+    // Use -? just in case we underflow, although we checked beforehand
+    let msg = _make_buffer(enc.size() -? @crypto_secretbox_macbytes())
     let ret = @crypto_secretbox_open_easy(msg.cpointer(),
                                           enc.cpointer(), enc.size().ulong(),
                                           nonce.cpointer(),
