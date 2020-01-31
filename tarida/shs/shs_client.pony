@@ -20,7 +20,7 @@ class iso HandshakeClient
   var _other_eph_pk: (Curve25519Public | None) = None
 
   var _short_term_shared_secret: (_ShortTermSS | None) = None
-  var _long_term_shared_secret: (_LongTermSS | None) = None
+  var _long_term_shared_secret: (_LongTermServerSS | None) = None
   var _self_detached_sign: (_ClientDetachedSign | None) = None
 
   new iso create(pk: Ed25519Public, sk: Ed25519Secret, other_id_pk: Ed25519Public) =>
@@ -66,7 +66,7 @@ class iso HandshakeClient
 
   fun ref _client_auth(): String? =>
     let short_term_ss = _short_term_shared_secret as _ShortTermSS
-    let long_term_ss = _long_term_shared_secret as _LongTermSS
+    let long_term_ss = _long_term_shared_secret as _LongTermServerSS
 
     let detached_sign = _Handshake.client_detached_sign(_other_id_pk, _id_sk, short_term_ss)?
     _self_detached_sign = detached_sign

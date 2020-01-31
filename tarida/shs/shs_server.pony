@@ -20,7 +20,7 @@ class iso HandshakeServer
   var _other_eph_pk: (Curve25519Public | None) = None
 
   var _short_term_shared_secret: (_ShortTermSS | None) = None
-  var _long_term_shared_secret: (_LongTermSS | None) = None
+  var _long_term_shared_secret: (_LongTermServerSS | None) = None
   var _client_detached_sign: (_ClientDetachedSign | None) = None
 
   new iso create(pk: Ed25519Public, sk: Ed25519Secret) =>
@@ -71,5 +71,5 @@ class iso HandshakeServer
       msg,
       _id_pk,
       _short_term_shared_secret as _ShortTermSS,
-      _long_term_shared_secret as _LongTermSS
+      _long_term_shared_secret as _LongTermServerSS
     )?

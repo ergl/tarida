@@ -13,7 +13,7 @@ class val _ShortTermSS is _OpaqueString
   new val create(from: String val) => _inner = from
   fun _get_inner(): String => _inner
 
-class val _LongTermSS is _OpaqueString
+class val _LongTermServerSS is _OpaqueString
   let _inner: String val
   new val create(from: String val) => _inner = from
   fun _get_inner(): String => _inner
@@ -60,7 +60,7 @@ primitive _Handshake
     id_sk: Ed25519Secret,
     eph_sk: Curve25519Secret,
     other_eph_pk: Curve25519Public)
-    : (_ShortTermSS, _LongTermSS)?
+    : (_ShortTermSS, _LongTermServerSS)?
   =>
 
     let short_term_ss = Sodium.scalar_mult(
@@ -73,14 +73,14 @@ primitive _Handshake
       other_eph_pk.string()
     )?
 
-    (_ShortTermSS(short_term_ss), _LongTermSS(long_term_ss))
+    (_ShortTermSS(short_term_ss), _LongTermServerSS(long_term_ss))
 
   // Must be only called from client
   fun client_derive_secret(
     eph_sk: Curve25519Secret,
     other_eph_pk: Curve25519Public,
     other_id_pk: Ed25519Public)
-    : (_ShortTermSS, _LongTermSS)?
+    : (_ShortTermSS, _LongTermServerSS)?
   =>
 
     let short_term_ss = Sodium.scalar_mult(
@@ -93,7 +93,7 @@ primitive _Handshake
       Sodium.ed25519_pk_to_curve25519(other_id_pk)?.string()
     )?
 
-    (_ShortTermSS(short_term_ss), _LongTermSS(long_term_ss))
+    (_ShortTermSS(short_term_ss), _LongTermServerSS(long_term_ss))
 
   fun client_detached_sign(
     server_pk: Ed25519Public,
@@ -119,7 +119,7 @@ primitive _Handshake
     detached_sign: _ClientDetachedSign,
     id_pk: Ed25519Public,
     short_term_ss: _ShortTermSS,
-    long_term_ss: _LongTermSS)
+    long_term_ss: _LongTermServerSS)
     : String?
   =>
     let net_id = network_id()
@@ -143,7 +143,7 @@ primitive _Handshake
     enc: String,
     id_pk: Ed25519Public,
     short_term_ss: _ShortTermSS,
-    long_term_ss: _LongTermSS)
+    long_term_ss: _LongTermServerSS)
     : (_ClientDetachedSign, Ed25519Public)?
   =>
 
