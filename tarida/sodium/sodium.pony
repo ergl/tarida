@@ -42,6 +42,33 @@ use @crypto_scalarmult_curve25519_bytes[USize]()
 use @crypto_sign_ed25519_pk_to_curve25519[I32](curve: Pointer[U8] tag, pk: Pointer[U8] tag)
 use @crypto_sign_ed25519_sk_to_curve25519[I32](curve: Pointer[U8] tag, sk: Pointer[U8] tag)
 
+use @crypto_sign_bytes[USize]()
+// Sign message `m` (of size `mlen`) with `sk`. The result will be written to `sig`, and its
+// size will be written to `siglen`. `siglen` will be up to crypto_sign_bytes.
+use @crypto_sign_detached[I32](sig: Pointer[U8] tag, siglen: Pointer[ULong] ref,
+                               m: Pointer[U8] tag, mlen: ULong,
+                               sk: Pointer[U8] tag)
+
+use @crypto_secretbox_macbytes[USize]()
+use @crypto_secretbox_keybytes[USize]()
+use @crypto_secretbox_noncebytes[USize]()
+// Encrypt message `m` (of size `mlen`) with key `k`, and put it into `c`.
+// `c` should be of at least crypto_secretbox_macbytes + `mlen`
+// `key` should be of size crypto_secretbox_keybytes
+// `nonce` should be of size crypto_secretbox_noncebytes
+use @crypto_secretbox_easy[I32](c: Pointer[U8] tag,
+                                m: Pointer[U8] tag, mlen: ULong,
+                                nonce: Pointer[U8] tag,
+                                key: Pointer[U8] tag)
+
+// Decrypt a message encrypted with crypto_secretbox_easy
+// `c` is the cyphertext, of size `clen`
+// `nonce` and `key` have to match the used in crypto_secretbox_easy
+use @crypto_secretbox_open_easy[I32](m: Pointer[U8] tag,
+                                     c: Pointer[U8] tag, clen: ULong,
+                                     nonce: Pointer[U8] tag,
+                                     key: Pointer[U8] tag)
+
 class val Ed25519Public
   let _inner: Array[U8] val
   new val create(from: Array[U8] iso) => _inner = consume from
@@ -153,3 +180,55 @@ primitive Sodium
     if \unlikely\ ret != 0 then error end
 
     Curve25519Secret(consume curve_sk)
+
+  fun sign_detached(msg: ByteSeq, key: ByteSeq): (ByteSeq, ULong)? =>
+    let signature = _make_buffer(@crypto_sign_bytes())
+    var signature_len = ULong(0)
+    let ret = @crypto_sign_detached(
+      signature.cpointer(),
+      addressof signature_len,
+      msg.cpointer(),
+      msg.size().ulong(),
+      key.cpointer()
+    )
+
+    if \unlikely\ ret != 0 then error end
+
+    (signature, signature_len)
+
+  fun box_easy(msg: ByteSeq, key: ByteSeq, nonce: ByteSeq): Array[U8] val? =>
+    if key.size() != @crypto_secretbox_keybytes() then
+      error
+    end
+
+    if nonce.size() != @crypto_secretbox_noncebytes() then
+      error
+    end
+
+    let enc = _make_buffer(@crypto_secretbox_macbytes() + msg.size())
+    let ret = @crypto_secretbox_easy(enc.cpointer(),
+                                     msg.cpointer(), msg.size().ulong(),
+                                     nonce.cpointer(),
+                                     key.cpointer())
+
+    if \unlikely\ ret != 0 then error end
+    enc
+
+  fun box_easy_open(enc: ByteSeq, key: ByteSeq, nonce: ByteSeq): Array[U8] val? =>
+    if key.size() != @crypto_secretbox_keybytes() then
+      error
+    end
+
+    if nonce.size() != @crypto_secretbox_noncebytes() then
+      error
+    end
+
+    // enc is of at least @crypto_secretbox_macbytes() + original msg size,
+    // so overshoot it, just in case
+    let msg = _make_buffer(enc.size())
+    let ret = @crypto_secretbox_open_easy(msg.cpointer(),
+                                          enc.cpointer(), enc.size().ulong(),
+                                          nonce.cpointer(),
+                                          key.cpointer())
+    if \unlikely\ ret != 0 then error end
+    msg

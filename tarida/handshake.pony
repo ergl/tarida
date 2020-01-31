@@ -1,4 +1,5 @@
 use "debug"
+use "crypto"
 use "sodium"
 
 primitive _ClientHello
@@ -42,7 +43,8 @@ class iso HandshakeClient
     | _ServerHello =>
       Debug.out("HandshakeClient _ServerHello")
       _state = _ServerAccept
-      (80, _do_verify_hello(msg)?)
+      _verify_hello(msg)?
+      (80, _client_auth()?)
 
     | _ServerAccept =>
       Debug.out("HandshakeClient _ServerAccept")
@@ -54,10 +56,8 @@ class iso HandshakeClient
     (_eph_pk, _eph_sk) = eph_pair
     Handshake.hello_challenge(eph_pair._1)?
 
-  fun ref _do_verify_hello(msg: String): String? =>
+  fun ref _verify_hello(msg: String)? =>
     let other_eph_pk = Handshake.hello_verify(msg)?
-    // FIXME(borja): Compute next client message
-    let resp = Handshake.hello_challenge(_eph_pk as Curve25519Public)?
     let secrets = Handshake.client_derive_secret(
       _eph_sk as Curve25519Secret,
       other_eph_pk, // Notice server's public key here
@@ -68,8 +68,12 @@ class iso HandshakeClient
     _short_term_shared_secret = secrets._1
     _long_term_shared_secret = secrets._2
 
-    resp
+  fun ref _client_auth(): String? =>
+    let short_term_ss = _short_term_shared_secret as ByteSeq
+    let long_term_ss = _long_term_shared_secret as ByteSeq
 
+    let detached_sign = Handshake.client_detached_sign(_other_id_pk, _id_sk, short_term_ss)?
+    Handshake.client_auth(detached_sign, _id_pk, short_term_ss, long_term_ss)?
 
 class iso HandshakeServer
   var _state: _ServerFSM
@@ -195,3 +199,47 @@ primitive Handshake
     )?
 
     (short_term_ss, long_term_ss)
+
+  fun client_detached_sign(
+    server_pk: Ed25519Public,
+    id_sk: Ed25519Secret,
+    short_term_ss: ByteSeq)
+    : ByteSeq?
+  =>
+
+    let net_id = network_id()
+    let hashed_ss = SHA256(short_term_ss)
+    let msg_size = net_id.size() + server_pk.size() + hashed_ss.size()
+    let msg = recover
+      String.create(msg_size)
+            .>append(String.from_array(net_id))
+            .>append(server_pk.string())
+            .>append(String.from_array(hashed_ss))
+    end
+
+    (let detached, _) = Sodium.sign_detached(consume msg, id_sk.string())?
+    detached
+
+  fun client_auth(
+    detached_sign: ByteSeq,
+    id_pk: Ed25519Public,
+    short_term_ss: ByteSeq,
+    long_term_ss: ByteSeq)
+    : String?
+  =>
+    let net_id = network_id()
+    let msg = recover
+      String.create(detached_sign.size() + id_pk.size())
+            .>append(detached_sign)
+            .>append(id_pk.string())
+    end
+    let raw_key = recover
+      String.create(net_id.size() + short_term_ss.size() + long_term_ss.size())
+            .>append(String.from_array(net_id))
+            .>append(short_term_ss)
+            .>append(long_term_ss)
+    end
+    let key = SHA256(consume raw_key)
+    // OK to use since this is the only time we encrypt this message
+    let nonce = recover Array[U8].init(0, 24) end
+    String.from_array(Sodium.box_easy(consume msg, consume key, consume nonce)?)
