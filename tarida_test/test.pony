@@ -51,4 +51,15 @@ class iso _TestSHS is UnitTest
     h.assert_eq[USize](0, s_expect_1) // Server is done
     h.assert_eq[USize](80, server_accept.size())
 
+    (let cl_expect_2, let empty) = (_shs_client as HandshakeClient).step(server_accept)?
+    h.assert_eq[USize](0, cl_expect_2) // Client is done
+    h.assert_eq[USize](0, empty.size()) // Client doesn't reply to this
+
+    // Now both server and client should error if trying to advance
+    try (_shs_server as HandshakeServer).step("")?; h.fail()
+    else h.assert_true(true) end
+
+    try (_shs_client as HandshakeClient).step("")?; h.fail()
+    else h.assert_true(true) end
+
   else h.fail() end

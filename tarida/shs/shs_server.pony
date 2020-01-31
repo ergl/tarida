@@ -3,8 +3,8 @@ use "package:../sodium"
 
 primitive _ClientHello
 primitive _ClientAuth
-primitive _Done
-type _ServerFSM is (_ClientHello | _ClientAuth | _Done)
+primitive _ServerDone
+type _ServerFSM is (_ClientHello | _ClientAuth | _ServerDone)
 
 class iso HandshakeServer
   var _state: _ServerFSM
@@ -48,10 +48,10 @@ class iso HandshakeServer
 
     | _ClientAuth =>
       _verify_client_auth(msg)?
-      _state = _Done
+      _state = _ServerDone
       Debug.out("HandshakeServer _ClientAuth")
       (0, _server_accept()?)
-    | _Done => error // Shouldn't reuse the server
+    | _ServerDone => error // Shouldn't reuse the server
     end
 
   fun ref _verify_hello(msg: String)? =>

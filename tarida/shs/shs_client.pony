@@ -4,7 +4,8 @@ use "package:../sodium"
 primitive _Init
 primitive _ServerHello
 primitive _ServerAccept
-type _ClientFSM is (_Init | _ServerHello | _ServerAccept)
+primitive _ClientDone
+type _ClientFSM is (_Init | _ServerHello | _ServerAccept | _ClientDone)
 
 // TODO(borja): Handle code duplication w/ https://patterns.ponylang.io/code-sharing/mixin.html
 class iso HandshakeClient
@@ -22,7 +23,9 @@ class iso HandshakeClient
   var _short_term_shared_secret: (_ShortTermSS | None) = None
   var _long_term_shared_secret_1: (_LongTermServerSS | None) = None
   var _long_term_shared_secret_2: (_LongTermClientSS | None) = None
+
   var _self_detached_sign: (_ClientDetachedSign | None) = None
+  var _server_detached_sign: (_ServerDetachedSign | None) = None
 
   new iso create(pk: Ed25519Public, sk: Ed25519Secret, other_id_pk: Ed25519Public) =>
     _id_pk = pk
@@ -44,8 +47,11 @@ class iso HandshakeClient
       (80, _client_auth()?)
 
     | _ServerAccept =>
+      _state = _ClientDone
       Debug.out("HandshakeClient _ServerAccept")
       (0, "")
+
+    | _ClientDone => error // Shouldn't reuse the client
     end
 
   fun ref _client_hello(): String? =>
@@ -77,3 +83,14 @@ class iso HandshakeClient
     let detached_sign = _Handshake.client_detached_sign(_other_id_pk, _id_sk, short_term_ss)?
     _self_detached_sign = detached_sign
     _Handshake.client_auth(detached_sign, _id_pk, short_term_ss, long_term_ss)?
+
+  fun ref _verify_server_accept(msg: String)? =>
+    _server_detached_sign = _Handshake.server_accept_verify(
+      where enc = msg,
+      client_id_pk = _id_pk,
+      server_id_pk = _other_id_pk,
+      client_sign = _self_detached_sign as _ClientDetachedSign,
+      short_term_ss = _short_term_shared_secret as _ShortTermSS,
+      long_term_ss_1 = _long_term_shared_secret_1 as _LongTermServerSS,
+      long_term_ss_2 = _long_term_shared_secret_2 as _LongTermClientSS
+    )?

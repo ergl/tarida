@@ -246,3 +246,48 @@ primitive _Handshake
     // OK to use since this is the only time we encrypt this message
     let nonce = recover Array[U8].init(0, 24) end
     Sodium.box_easy(server_sign.string(), consume key, consume nonce)?
+
+  // TODO(borja): Consider splitting function
+  fun server_accept_verify(
+    enc: String,
+    client_id_pk: Ed25519Public,
+    server_id_pk: Ed25519Public,
+    client_sign: _ClientDetachedSign,
+    short_term_ss: _ShortTermSS,
+    long_term_ss_1: _LongTermServerSS,
+    long_term_ss_2: _LongTermClientSS)
+    : _ServerDetachedSign?
+  =>
+    let net_id = network_id()
+    // OK to use since this is the only time we encrypt this message
+    let nonce = recover Array[U8].init(0, 24) end
+    let key_size = net_id.size() + short_term_ss.size() + long_term_ss_1.size() + long_term_ss_2.size()
+    let raw_key = recover
+      String.create(key_size)
+            .>append(String.from_array(net_id))
+            .>append(short_term_ss.string())
+            .>append(long_term_ss_1.string())
+            .>append(long_term_ss_2.string())
+    end
+    let key = SHA256(consume raw_key)
+
+    let server_sign = Sodium.box_easy_open(enc, consume key, consume nonce)?
+
+    let hashed_ss = SHA256(short_term_ss.string())
+    let msg_size = net_id.size() + client_sign.size() + client_id_pk.size() + hashed_ss.size()
+    let msg = recover
+      String.create(msg_size)
+            .>append(String.from_array(net_id))
+            .>append(client_sign.string())
+            .>append(client_id_pk.string())
+            .>append(String.from_array(hashed_ss))
+    end
+
+    let valid = Sodium.sign_detached_verify(
+      where sig = server_sign,
+      msg = consume msg,
+      key = server_id_pk.string()
+    )
+
+    if not valid then error end
+    _ServerDetachedSign(server_sign)
