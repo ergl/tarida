@@ -16,8 +16,8 @@ class iso HandshakeServer
 
   var _other_eph_pk: (Curve25519Public | None) = None
 
-  var _short_term_shared_secret: (ByteSeq | None) = None
-  var _long_term_shared_secret: (ByteSeq | None) = None
+  var _short_term_shared_secret: (_ShortTermSS | None) = None
+  var _long_term_shared_secret: (_LongTermSS | None) = None
 
   new iso create(pk: Ed25519Public, sk: Ed25519Secret) =>
     _id_pk = pk
