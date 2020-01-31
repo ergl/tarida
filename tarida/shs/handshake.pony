@@ -1,6 +1,6 @@
 use "debug"
 use "crypto"
-use "sodium"
+use "package:../sodium"
 
 primitive _ClientHello
 primitive _ClientAuth

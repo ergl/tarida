@@ -1,6 +1,7 @@
 use "net"
-use "debug"
+use "shs"
 use "sodium"
+use "debug"
 
 // SHS/RPC Ideas:
 // On starting, our TCP server uses a Handshake notify, that performs the SHS mechanism.

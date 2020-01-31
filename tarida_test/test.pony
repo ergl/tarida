@@ -1,5 +1,5 @@
 use "ponytest"
-use "package:../tarida"
+use "package:../tarida/shs"
 use "package:../tarida/sodium"
 
 actor Main is TestList
@@ -21,8 +21,8 @@ class iso _TestSHS is UnitTest
   fun name(): String => "SHS Handshake"
 
   fun ref set_up(h: TestHelper)? =>
-    (let spk, let ssk) = Identity.generate()?
-    (let cpk, let csk) = Identity.generate()?
+    (let spk, let ssk) = Sodium.ed25519_pair()?
+    (let cpk, let csk) = Sodium.ed25519_pair()?
 
     _shs_server = HandshakeServer(spk, ssk).>init()?
     _shs_client = HandshakeClient(cpk, csk, spk)
