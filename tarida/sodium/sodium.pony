@@ -135,7 +135,7 @@ primitive Sodium
 
     (Curve25519Public(consume pk), Curve25519Secret(consume sk))
 
-  fun auth_msg(msg: ByteSeq, key: ByteSeq): ByteSeq? =>
+  fun auth_msg(msg: ByteSeq, key: ByteSeq): String? =>
     if key.size() != @crypto_auth_keybytes() then
       error
     end
@@ -144,7 +144,7 @@ primitive Sodium
     let ret = @crypto_auth(resp.cpointer(), msg.cpointer(), msg.size().ulong(), key.cpointer())
     if \unlikely\ ret != 0 then error end
 
-    resp
+    String.from_array(consume resp)
 
   fun auth_msg_verify(auth_tag: ByteSeq, msg: ByteSeq, key: ByteSeq): Bool =>
     0 == @crypto_auth_verify(auth_tag.cpointer(),
@@ -173,7 +173,7 @@ primitive Sodium
 
     Curve25519Secret(consume curve_sk)
 
-  fun sign_detached(msg: ByteSeq, key: ByteSeq): (ByteSeq, ULong)? =>
+  fun sign_detached(msg: ByteSeq, key: ByteSeq): (String, ULong)? =>
     let signature = _make_buffer(@crypto_sign_bytes())
     var signature_len = ULong(0)
     let ret = @crypto_sign_detached(
@@ -186,9 +186,9 @@ primitive Sodium
 
     if \unlikely\ ret != 0 then error end
 
-    (signature, signature_len)
+    (String.from_array(consume signature), signature_len)
 
-  fun box_easy(msg: ByteSeq, key: ByteSeq, nonce: ByteSeq): Array[U8] val? =>
+  fun box_easy(msg: ByteSeq, key: ByteSeq, nonce: ByteSeq): String? =>
     if key.size() != @crypto_secretbox_keybytes() then
       error
     end
@@ -204,9 +204,9 @@ primitive Sodium
                                      key.cpointer())
 
     if \unlikely\ ret != 0 then error end
-    enc
+    String.from_array(consume enc)
 
-  fun box_easy_open(enc: ByteSeq, key: ByteSeq, nonce: ByteSeq): Array[U8] val? =>
+  fun box_easy_open(enc: ByteSeq, key: ByteSeq, nonce: ByteSeq): String? =>
     if key.size() != @crypto_secretbox_keybytes() then
       error
     end
@@ -223,4 +223,4 @@ primitive Sodium
                                           nonce.cpointer(),
                                           key.cpointer())
     if \unlikely\ ret != 0 then error end
-    msg
+    String.from_array(consume msg)
