@@ -43,22 +43,38 @@ class val _BoxStreamEncKey is _OpaqueString
   new val create(from: String val) => _inner = from
   fun _get_inner(): String => _inner
 
-class val _BoxStreamEncNonce is _OpaqueString
-  let _inner: String val
-  new val create(from: String val) => _inner = from
-  fun _get_inner(): String => _inner
-
 class val _BoxStreamDecKey is _OpaqueString
   let _inner: String val
   new val create(from: String val) => _inner = from
   fun _get_inner(): String => _inner
 
-class val _BoxStreamDecNonce is _OpaqueString
-  let _inner: String val
-  new val create(from: String val) => _inner = from
-  fun _get_inner(): String => _inner
+// FIXME(borja): Figure out what to do if we reuse nonces. Should we crash?
+// Nonces in BoxStream are incremented for every message, so we need a way to
+// efficiently increment them and convert them back and forth between arrays.
+// Incrementing as an array requires touching every element, but encoding the
+// array as an integer allows very fast incrementing. To convert them to
+// arrays, we just encode them again. Pony stores Arrays in big endian, so we
+// need to reverse them
+interface iso _InPlaceNonce
+  // 2**24 - 1, the max number stored in 24 bytes
+  fun _get_limit(): U32 => 16_777_215
+  fun _get_inner(): U32
+  fun ref next(): U32
+  fun as_nonce(): String =>
+    let arr = recover val Array[U8](4).>push_u32(_get_inner()).>reverse_in_place() end
+    String.from_array(arr.trim(1,4)) // Shave to 24 bytes (32 - 8)
 
-type _BoxKeys is (_BoxStreamEncKey, _BoxStreamEncNonce, _BoxStreamDecKey, _BoxStreamDecNonce)
+class iso _BoxStreamEncNonce is _InPlaceNonce
+  var current: U32
+  new iso create(from: U32) => current = from
+  fun _get_inner(): U32 => current
+  fun ref next(): U32 => current = (current + 1).mod(_get_limit())
+
+class iso _BoxStreamDecNonce is _InPlaceNonce
+  var current: U32
+  new iso create(from: U32) => current = from
+  fun _get_inner(): U32 => current
+  fun ref next(): U32 => current = (current + 1).mod(_get_limit())
 
 // TODO(borja): Plug integration tests from https://github.com/AljoschaMeyer/shs1-test
 primitive _Handshake
@@ -345,7 +361,7 @@ primitive _Handshake
     other_id_pk: Ed25519Public,
     self_eph_pk: Curve25519Public,
     other_eph_pk: Curve25519Public)
-    : _BoxKeys?
+    : BoxStream^?
   =>
 
     let net_id = network_id()
@@ -355,10 +371,11 @@ primitive _Handshake
             .>append(other_id_pk.string())
     end))
 
-    let enc_nonce = Sodium.auth_msg(
+    // Ugh
+    let enc_nonce = _BoxStreamEncNonce(Sodium.auth_msg(
       other_eph_pk.string().trim(0, 23),
       String.from_array(net_id)
-    )?
+    )?.array().>reverse().read_u32(0)?)
 
     let dec_k = String.from_array(SHA256(recover
       String.create(secret.size() + self_id_pk.size())
@@ -366,9 +383,10 @@ primitive _Handshake
             .>append(self_id_pk.string())
     end))
 
-    let dec_nonce = Sodium.auth_msg(
+    // Ugh
+    let dec_nonce = _BoxStreamDecNonce(Sodium.auth_msg(
       self_eph_pk.string().trim(0, 23),
       String.from_array(net_id)
-    )?
+    )?.array().>reverse().read_u32(0)?)
 
-    (_BoxStreamEncKey(enc_k), _BoxStreamEncNonce(enc_nonce), _BoxStreamDecKey(dec_k), _BoxStreamDecNonce(dec_nonce))
+    BoxStream(_BoxStreamEncKey(enc_k), consume enc_nonce, _BoxStreamDecKey(dec_k), consume dec_nonce)

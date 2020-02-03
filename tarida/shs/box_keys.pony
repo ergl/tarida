@@ -12,67 +12,67 @@
 // receiving messages (no duplex). So one box stream only knows how to decrypting,
 // and the only one only needs to know about encrypting.
 
-// Nonces are incremented by one on every message, so we need to be able to
-// update them in-place for efficiency. When passed to Sodium though, they'll
-// need to be immutable. So we need to find a way to make this possible without
-// having a lot of copies (returning an iso that can be consumed?)
-// TODO(borja): Figure out if we need to keep into account that we might
-// reuse nonces. Should we crash?
-interface iso _InPlaceNonce
-  fun ref _get_inner(): Array[U8]
-  fun ref next() =>
-    let inner = _get_inner()
-    try
-      var idx = inner.size() - 1
-      var n = U8(0)
-      var prev = U8(0)
-      while idx >= 0 do
-        prev = inner(idx)?
-        n = (prev + 1).mod(10)
-        inner(idx)? = n
-        if prev < n then
-          break
-        end
-        idx = idx - 1
-      end
-    else
-      None
-    end
-
-class iso _InPlaceEncNonce is _InPlaceNonce
-  let _inner: Array[U8]
-  new create(from: _BoxStreamEncNonce) =>
-    // FIXME(borja): Ugh, make this better
-    _inner = from._get_inner().clone().iso_array()
-  fun ref _get_inner(): Array[U8] => _inner
+use "package:../sodium"
 
 class iso BoxStream
-  let _original_enc_nonce: _BoxStreamEncNonce
-  let _original_dec_nonce: _BoxStreamDecNonce
-
   let _enc_key: _BoxStreamEncKey
   let _dec_key: _BoxStreamDecKey
 
-  var _enc_nonce: _BoxStreamEncNonce
-  var _dec_nonce: _BoxStreamDecNonce
+  let _enc_nonce: _BoxStreamEncNonce
+  let _dec_nonce: _BoxStreamDecNonce
 
-  new iso create(keys: _BoxKeys) =>
-    _enc_key = keys._1
-     _enc_nonce = keys._2
-     _original_enc_nonce = _enc_nonce
+  new iso create(
+    enc_key: _BoxStreamEncKey,
+    enc_nonce: _BoxStreamEncNonce,
+    dec_key: _BoxStreamDecKey,
+    dec_nonce: _BoxStreamDecNonce)
+  =>
+    _enc_key = enc_key
+    _enc_nonce = consume enc_nonce
 
-    _dec_key = keys._3
-     _dec_nonce = keys._4
-     _original_dec_nonce = _dec_nonce
+    _dec_key = dec_key
+     _dec_nonce = consume dec_nonce
 
   fun header_size(): USize => 34
 
   fun ref encrypt(msg: String): String? =>
+    let msg_size = msg.size()
     // TODO(borja): Perform chunking at a higher level
-    if msg.size() > 4096 then error end
-    // TODO(borja): Implement
-    msg
+    if msg_size > 4096 then error end
+
+    let header_nonce = _enc_nonce.as_nonce(); _enc_nonce.next()
+    let body_nonce = _enc_nonce.as_nonce(); _enc_nonce.next()
+
+    let packet_size = msg_size + 34
+    let packet = recover String.create(packet_size) end
+
+    let raw_enc_body = Sodium.box_easy(msg, _enc_key.string(), body_nonce)?
+    let auth_tag = raw_enc_body.trim(0, 15)
+    let enc_body = raw_enc_body.trim(16)
+    let header = recover [as U8: (msg_size >> 8).u8(); msg_size.u8()].>append(auth_tag) end
+    let enc_header = Sodium.box_easy(consume header, _enc_key.string(), header_nonce)?
+
+    packet.>append(enc_header).>append(enc_body)
+
+  fun ref decrypt_header(msg: String): (USize, String)? =>
+    let header_nonce = _dec_nonce.as_nonce(); _dec_nonce.next()
+    let header = Sodium.box_easy_open(msg, _dec_key.string(), header_nonce)?
+    if header.size() != 18 then error end // Spec
+    let raw_body_size = header.trim(0, 1) // First two bytes are the body size
+    // Convert back to USize
+    let body_size = (raw_body_size(0)?.usize() << 8) + (raw_body_size(1)?.usize())
+    let body_auth = header.trim(2)
+
+    (body_size, body_auth)
+
+  fun ref decrypt(body_auth: String, msg: String): String? =>
+    let body_nonce = _dec_nonce.as_nonce(); _dec_nonce.next()
+
+    let msg_size = msg.size() + body_auth.size() // Auth should be 16 bytes
+    let enc_msg = recover String.create(msg_size).>append(body_auth).>append(msg) end
+    Sodium.box_easy_open(consume enc_msg, _dec_key.string(), body_nonce)?
+
 
 primitive BoxKeys
   fun apply(shs: (HandshakeServer | HandshakeClient)): BoxStream iso^? =>
-    BoxStream(shs._full_secret()?)
+    shs._full_secret()?

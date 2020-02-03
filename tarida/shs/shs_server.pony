@@ -54,7 +54,7 @@ class iso HandshakeServer
     | _ServerDone => error // Shouldn't reuse the server
     end
 
-  fun _full_secret(): _BoxKeys? =>
+  fun _full_secret(): BoxStream^? =>
     if _state isnt _ServerDone then error end
 
     let secret = _Handshake.make_secret(
