@@ -8,6 +8,8 @@ primitive _ClientDone
 type _ClientFSM is (_Init | _ServerHello | _ServerAccept | _ClientDone)
 
 // TODO(borja): Handle code duplication w/ https://patterns.ponylang.io/code-sharing/mixin.html
+// Also, consider changing the implementation to use type states,
+// aking to something like http://cliffle.com/blog/rust-typestate/
 class iso HandshakeClient
   var _state: _ClientFSM
 
