@@ -4,16 +4,20 @@ use "lib:sodium"
 use @sodium_init[I32]()
 use @crypto_sign_publickeybytes[USize]()
 use @crypto_sign_secretkeybytes[USize]()
+use @crypto_sign_seedbytes[USize]()
 // pk should be of size crypto_sign_publickeybytes
 // sk should be of size crypto_sign_secretkeybytes
 use @crypto_sign_keypair[I32](pk: Pointer[U8] tag, sk: Pointer[U8] tag)
+use @crypto_sign_seed_keypair[I32](pk: Pointer[U8] tag, sk: Pointer[U8] tag, seed: Pointer[U8] tag)
 // pk is filled by callee
 use @crypto_sign_ed25519_sk_to_pk[I32](pk: Pointer[U8] tag, sk: Pointer[U8] tag)
 
 // Ephemeral Curve25519
 use @crypto_box_publickeybytes[USize]()
 use @crypto_box_secretkeybytes[USize]()
+use @crypto_box_seedbytes[USize]()
 use @crypto_box_keypair[I32](pk: Pointer[U8] tag, sk: Pointer[U8] tag)
+use @crypto_box_seed_keypair[I32](pk: Pointer[U8] tag, sk: Pointer[U8] tag, seed: Pointer[U8] tag)
 
 use @crypto_auth_bytes[USize]()
 use @crypto_auth_keybytes[USize]()
@@ -127,6 +131,17 @@ primitive Sodium
 
     (Ed25519Public(consume pk), Ed25519Secret(consume sk))
 
+  fun ed25519_pair_seed(seed: ByteSeq): (Ed25519Public, Ed25519Secret)? =>
+    if seed.size() != @crypto_sign_seedbytes() then error end
+
+    let pk = _make_buffer(@crypto_sign_publickeybytes())
+    let sk = _make_buffer(@crypto_sign_secretkeybytes())
+
+    let ret = @crypto_sign_seed_keypair(pk.cpointer(), sk.cpointer(), seed.cpointer())
+    if \unlikely\ ret != 0 then error end
+
+    (Ed25519Public(consume pk), Ed25519Secret(consume sk))
+
   fun ed25519_pair_sk_to_pk(sk: Ed25519Secret): Ed25519Public? =>
     let pk = _make_buffer(@crypto_sign_publickeybytes())
     let ret = @crypto_sign_ed25519_sk_to_pk(pk.cpointer(), sk.cpointer())
@@ -138,6 +153,17 @@ primitive Sodium
     let sk = _make_buffer(@crypto_box_secretkeybytes())
 
     let ret = @crypto_box_keypair(pk.cpointer(), sk.cpointer())
+    if \unlikely\ ret != 0 then error end
+
+    (Curve25519Public(consume pk), Curve25519Secret(consume sk))
+
+  fun curve25519_pair_seed(seed: ByteSeq): (Curve25519Public, Curve25519Secret)? =>
+    if seed.size() != @crypto_box_seedbytes() then error end
+
+    let pk = _make_buffer(@crypto_box_publickeybytes())
+    let sk = _make_buffer(@crypto_box_secretkeybytes())
+
+    let ret = @crypto_box_seed_keypair(pk.cpointer(), sk.cpointer(), seed.cpointer())
     if \unlikely\ ret != 0 then error end
 
     (Curve25519Public(consume pk), Curve25519Secret(consume sk))
