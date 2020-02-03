@@ -19,9 +19,9 @@ class iso HandshakeServer
 
   var _other_eph_pk: (Curve25519Public | None) = None
 
-  var _short_term_shared_secret: (_ShortTermSS | None) = None
-  var _long_term_shared_secret_1: (_LongTermServerSS | None) = None
-  var _long_term_shared_secret_2: (_LongTermClientSS | None) = None
+  var _shared_secret_1: (_SharedSecret1 | None) = None
+  var _shared_secret_2: (_SharedSecret2 | None) = None
+  var _shared_secret_3: (_SharedSecret3 | None) = None
 
   var _client_detached_sign: (_ClientDetachedSign | None) = None
   var _server_detached_sign: (_ServerDetachedSign | None) = None
@@ -58,9 +58,9 @@ class iso HandshakeServer
     if _state isnt _ServerDone then error end
 
     let secret = _Handshake.make_secret(
-      _short_term_shared_secret as _ShortTermSS,
-      _long_term_shared_secret_1 as _LongTermServerSS,
-      _long_term_shared_secret_2 as _LongTermClientSS
+      _shared_secret_1 as _SharedSecret1,
+      _shared_secret_2 as _SharedSecret2,
+      _shared_secret_3 as _SharedSecret3
     )?
 
     _Handshake.make_box_keys(
@@ -80,8 +80,8 @@ class iso HandshakeServer
     )?
 
     _other_eph_pk = other_eph_pk
-    _short_term_shared_secret = secrets._1
-    _long_term_shared_secret_1 = secrets._2
+    _shared_secret_1 = secrets._1
+    _shared_secret_2 = secrets._2
 
   fun _server_hello(): String? =>
     _Handshake.hello_challenge(_eph_pk as Curve25519Public)?
@@ -90,34 +90,34 @@ class iso HandshakeServer
     let results = _Handshake.client_auth_verify(
       msg,
       _id_pk,
-      _short_term_shared_secret as _ShortTermSS,
-      _long_term_shared_secret_1 as _LongTermServerSS
+      _shared_secret_1 as _SharedSecret1,
+      _shared_secret_2 as _SharedSecret2
     )?
 
     _client_detached_sign = results._1
     _other_id_pk = results._2
     // Now that we have the client's public key, derive secret
-    _long_term_shared_secret_2 = _Handshake.server_derive_secret_2(
+    _shared_secret_3 = _Handshake.server_derive_secret_2(
       _eph_sk as Curve25519Secret,
       _other_id_pk as Ed25519Public
     )?
 
   fun ref _server_accept(): String? =>
-    let short_term_ss = _short_term_shared_secret as _ShortTermSS
+    let shared_secret_1 = _shared_secret_1 as _SharedSecret1
     let sign = _Handshake.server_detached_sign(
         _id_sk,
         _other_id_pk as Ed25519Public,
         _client_detached_sign as _ClientDetachedSign,
-        short_term_ss
+        shared_secret_1
     )?
 
     _server_detached_sign = sign
 
-    let long_term_ss_1 = _long_term_shared_secret_1 as _LongTermServerSS
-    let long_term_ss_2 = _long_term_shared_secret_2 as _LongTermClientSS
+    let shared_secret_2 = _shared_secret_2 as _SharedSecret2
+    let shared_secret_3 = _shared_secret_3 as _SharedSecret3
     _Handshake.server_accept(
       sign,
-      short_term_ss,
-      long_term_ss_1,
-      long_term_ss_2
+      shared_secret_1,
+      shared_secret_2,
+      shared_secret_3
     )?

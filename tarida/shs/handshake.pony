@@ -8,17 +8,17 @@ interface val _OpaqueString
   fun size(): USize => _get_inner().size()
   fun string(): String => _get_inner()
 
-class val _ShortTermSS is _OpaqueString
+class val _SharedSecret1 is _OpaqueString
   let _inner: String val
   new val create(from: String val) => _inner = from
   fun _get_inner(): String => _inner
 
-class val _LongTermServerSS is _OpaqueString
+class val _SharedSecret2 is _OpaqueString
   let _inner: String val
   new val create(from: String val) => _inner = from
   fun _get_inner(): String => _inner
 
-class val _LongTermClientSS is _OpaqueString
+class val _SharedSecret3 is _OpaqueString
   let _inner: String val
   new val create(from: String val) => _inner = from
   fun _get_inner(): String => _inner
@@ -90,8 +90,10 @@ primitive _Handshake
 
   fun hello_challenge(pk: Curve25519Public): String? =>
     let auth = Sodium.auth_msg(pk.string(), network_id())?
-    recover String.create(auth.size() + pk.size())
-                  .>append(auth).>append(pk)
+    recover
+      String.create(auth.size() + pk.size())
+            .>append(auth)
+            .>append(pk)
     end
 
   fun hello_verify(msg: String): Curve25519Public? =>
@@ -114,7 +116,7 @@ primitive _Handshake
     id_sk: Ed25519Secret,
     eph_sk: Curve25519Secret,
     other_eph_pk: Curve25519Public)
-    : (_ShortTermSS, _LongTermServerSS)?
+    : (_SharedSecret1, _SharedSecret2)?
   =>
 
     let short_term_ss = Sodium.scalar_mult(
@@ -127,14 +129,14 @@ primitive _Handshake
       other_eph_pk.string()
     )?
 
-    (_ShortTermSS(short_term_ss), _LongTermServerSS(long_term_ss))
+    (_SharedSecret1(short_term_ss), _SharedSecret2(long_term_ss))
 
   // Must be only called from client
   fun client_derive_secret_1(
     eph_sk: Curve25519Secret,
     other_eph_pk: Curve25519Public,
     other_id_pk: Ed25519Public)
-    : (_ShortTermSS, _LongTermServerSS)?
+    : (_SharedSecret1, _SharedSecret2)?
   =>
 
     let short_term_ss = Sodium.scalar_mult(
@@ -147,12 +149,12 @@ primitive _Handshake
       Sodium.ed25519_pk_to_curve25519(other_id_pk)?.string()
     )?
 
-    (_ShortTermSS(short_term_ss), _LongTermServerSS(long_term_ss))
+    (_SharedSecret1(short_term_ss), _SharedSecret2(long_term_ss))
 
   fun client_detached_sign(
     server_pk: Ed25519Public,
     id_sk: Ed25519Secret,
-    short_term_ss: _ShortTermSS)
+    short_term_ss: _SharedSecret1)
     : _ClientDetachedSign?
   =>
 
@@ -172,8 +174,8 @@ primitive _Handshake
   fun client_auth(
     detached_sign: _ClientDetachedSign,
     id_pk: Ed25519Public,
-    short_term_ss: _ShortTermSS,
-    long_term_ss: _LongTermServerSS)
+    short_term_ss: _SharedSecret1,
+    long_term_ss: _SharedSecret2)
     : String?
   =>
     let net_id = network_id()
@@ -196,8 +198,8 @@ primitive _Handshake
   fun client_auth_verify(
     enc: String,
     id_pk: Ed25519Public,
-    short_term_ss: _ShortTermSS,
-    long_term_ss: _LongTermServerSS)
+    short_term_ss: _SharedSecret1,
+    long_term_ss: _SharedSecret2)
     : (_ClientDetachedSign, Ed25519Public)?
   =>
 
@@ -235,14 +237,14 @@ primitive _Handshake
     if not valid then error end
     (_ClientDetachedSign(sign_detached), Ed25519Public.from_string(client_id_pk))
 
-  fun client_derive_secret_2(id_sk: Ed25519Secret, other_eph_pk: Curve25519Public): _LongTermClientSS? =>
-    _LongTermClientSS(Sodium.scalar_mult(
+  fun client_derive_secret_2(id_sk: Ed25519Secret, other_eph_pk: Curve25519Public): _SharedSecret3? =>
+    _SharedSecret3(Sodium.scalar_mult(
       Sodium.ed25519_sk_to_curve25519(id_sk)?.string(),
       other_eph_pk.string()
     )?)
 
-  fun server_derive_secret_2(eph_sk: Curve25519Secret, other_id_pk: Ed25519Public): _LongTermClientSS? =>
-    _LongTermClientSS(Sodium.scalar_mult(
+  fun server_derive_secret_2(eph_sk: Curve25519Secret, other_id_pk: Ed25519Public): _SharedSecret3? =>
+    _SharedSecret3(Sodium.scalar_mult(
       eph_sk.string(),
       Sodium.ed25519_pk_to_curve25519(other_id_pk)?.string()
     )?)
@@ -251,7 +253,7 @@ primitive _Handshake
     server_id_sk: Ed25519Secret,
     client_id_pk: Ed25519Public,
     client_sign: _ClientDetachedSign,
-    short_term_ss: _ShortTermSS)
+    short_term_ss: _SharedSecret1)
     : _ServerDetachedSign?
   =>
 
@@ -271,9 +273,9 @@ primitive _Handshake
 
   fun server_accept(
     server_sign: _ServerDetachedSign,
-    short_term_ss: _ShortTermSS,
-    long_term_ss_1: _LongTermServerSS,
-    long_term_ss_2: _LongTermClientSS)
+    short_term_ss: _SharedSecret1,
+    long_term_ss_1: _SharedSecret2,
+    long_term_ss_2: _SharedSecret3)
     : String?
   =>
 
@@ -297,9 +299,9 @@ primitive _Handshake
     client_id_pk: Ed25519Public,
     server_id_pk: Ed25519Public,
     client_sign: _ClientDetachedSign,
-    short_term_ss: _ShortTermSS,
-    long_term_ss_1: _LongTermServerSS,
-    long_term_ss_2: _LongTermClientSS)
+    short_term_ss: _SharedSecret1,
+    long_term_ss_1: _SharedSecret2,
+    long_term_ss_2: _SharedSecret3)
     : _ServerDetachedSign?
   =>
     let net_id = network_id()
@@ -337,9 +339,9 @@ primitive _Handshake
     _ServerDetachedSign(server_sign)
 
   fun make_secret(
-    ss_1: _ShortTermSS,
-    ss_2: _LongTermServerSS,
-    ss_3: _LongTermClientSS)
+    ss_1: _SharedSecret1,
+    ss_2: _SharedSecret2,
+    ss_3: _SharedSecret3)
     : _BareBoxStreamSecret?
   =>
 

@@ -22,9 +22,9 @@ class iso HandshakeClient
 
   var _other_eph_pk: (Curve25519Public | None) = None
 
-  var _short_term_shared_secret: (_ShortTermSS | None) = None
-  var _long_term_shared_secret_1: (_LongTermServerSS | None) = None
-  var _long_term_shared_secret_2: (_LongTermClientSS | None) = None
+  var _shared_secret_1: (_SharedSecret1 | None) = None
+  var _shared_secret_2: (_SharedSecret2 | None) = None
+  var _shared_secret_3: (_SharedSecret3 | None) = None
 
   var _self_detached_sign: (_ClientDetachedSign | None) = None
   var _server_detached_sign: (_ServerDetachedSign | None) = None
@@ -60,9 +60,9 @@ class iso HandshakeClient
     if _state isnt _ClientDone then error end
 
     let secret = _Handshake.make_secret(
-      _short_term_shared_secret as _ShortTermSS,
-      _long_term_shared_secret_1 as _LongTermServerSS,
-      _long_term_shared_secret_2 as _LongTermClientSS
+      _shared_secret_1 as _SharedSecret1,
+      _shared_secret_2 as _SharedSecret2,
+      _shared_secret_3 as _SharedSecret3
     )?
 
     _Handshake.make_box_keys(
@@ -87,17 +87,17 @@ class iso HandshakeClient
     )?
 
     _other_eph_pk = other_eph_pk
-    _short_term_shared_secret = secrets._1
-    _long_term_shared_secret_1 = secrets._2
+    _shared_secret_1 = secrets._1
+    _shared_secret_2 = secrets._2
     // Inline second secret derivation here
-    _long_term_shared_secret_2 = _Handshake.client_derive_secret_2(
+    _shared_secret_3 = _Handshake.client_derive_secret_2(
       _id_sk,
       other_eph_pk
     )?
 
   fun ref _client_auth(): String? =>
-    let short_term_ss = _short_term_shared_secret as _ShortTermSS
-    let long_term_ss = _long_term_shared_secret_1 as _LongTermServerSS
+    let short_term_ss = _shared_secret_1 as _SharedSecret1
+    let long_term_ss = _shared_secret_2 as _SharedSecret2
 
     let detached_sign = _Handshake.client_detached_sign(_other_id_pk, _id_sk, short_term_ss)?
     _self_detached_sign = detached_sign
@@ -109,7 +109,7 @@ class iso HandshakeClient
       client_id_pk = _id_pk,
       server_id_pk = _other_id_pk,
       client_sign = _self_detached_sign as _ClientDetachedSign,
-      short_term_ss = _short_term_shared_secret as _ShortTermSS,
-      long_term_ss_1 = _long_term_shared_secret_1 as _LongTermServerSS,
-      long_term_ss_2 = _long_term_shared_secret_2 as _LongTermClientSS
+      short_term_ss = _shared_secret_1 as _SharedSecret1,
+      long_term_ss_1 = _shared_secret_2 as _SharedSecret2,
+      long_term_ss_2 = _shared_secret_3 as _SharedSecret3
     )?
