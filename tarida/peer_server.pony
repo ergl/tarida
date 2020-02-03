@@ -37,17 +37,19 @@ class iso _PeerNotify is TCPConnectionNotify
       if expect == 0 then
         // TODO(borja): Swap notify
         Debug.out("Handshake complete")
-        return true
       end
 
-      conn.expect(expect)?
       conn.write(resp)
+      conn.expect(expect)?
     else
       Debug.err("Error: _PeerNotify bad SHS")
       conn.close()
     end
 
     true
+
+  fun ref closed(conn: TCPConnection ref) =>
+    Debug.out("_PeerNotify closed")
 
   fun ref connect_failed(conn: TCPConnection ref) =>
     None
