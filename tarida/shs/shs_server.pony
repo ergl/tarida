@@ -31,6 +31,10 @@ class iso HandshakeServer
     _id_sk = sk
     _state = _ClientHello
 
+  // FIXME(borja): Maybe return a capability from this
+  // Since SHSServer shouldn't be used without calling init first, we could
+  // return a capability here, and require it as an argument for every call,
+  // so we never forget to call it.
   fun ref init(): USize? =>
     (_eph_pk, _eph_sk) = Sodium.curve25519_pair()?
     64

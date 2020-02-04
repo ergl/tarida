@@ -61,13 +61,14 @@ primitive Config
     let client = cmd.option("client").bool()
     let server = cmd.option("server").bool()
 
-    config.mode = if client == true then Client else Server end
+    config.mode = if server == true then Server else Client end
     config.seed = cmd.option("seed").string()
     config
 
 actor Main
   new create(env: Env) =>
     try
+      Sodium.init()?
       let config = Config(env)?
       let notify = match config.mode
       | Client => Input.client(env, config.seed)
@@ -80,7 +81,7 @@ primitive Input
   fun client(env: Env, seed: String): InputNotify iso^ =>
     let term = _make_ansiterm(env, recover ClientNotify(env.out, seed) end)
     env.out.print("Testing client")
-    term.prompt("Input server_hello: ")
+    term.prompt("Press enter to continue: ")
     _to_notify(term)
 
   fun server(env: Env, seed: String): InputNotify iso^ =>
@@ -103,13 +104,35 @@ class ServerNotify is ReadlineNotify
   let _out: OutStream
   let _seed: String
 
+  var _public: (Ed25519Public|None) = None
+  var _secret: (Ed25519Secret|None) = None
+
+  var _server_fsm: (HandshakeServer|None) = None
+
   fun ref tab(line: String val): Seq[String val] box => []
   new create(out: OutStream, seed: String) =>
     _out = out
-    _seed = seed
+    _seed = String.from_array(recover Array[U8].init(0, 32) end)
+    _do_init()
 
   fun ref apply(line: String, prompt: Promise[String] tag) =>
-    prompt("Hey :^)")
+    try
+      (let expect, let resp) = (_server_fsm as HandshakeServer).step(String.from_array(Base64.decode(line)?))?
+      _out.print(Base64.encode(resp))
+      prompt("Next message> ")
+    else
+      prompt.reject()
+    end
+
+  fun ref _do_init() =>
+    try
+      (let self_pk, let self_sk) = Sodium.ed25519_pair_seed(_seed)?
+      _server_fsm = HandshakeServer.create(
+        self_pk,
+        self_sk
+      )
+      (_server_fsm as HandshakeServer).init()?
+    end
 
 class ClientNotify is ReadlineNotify
   let _out: OutStream
@@ -124,12 +147,12 @@ class ClientNotify is ReadlineNotify
   fun ref tab(line: String val): Seq[String val] box => []
   new create(out: OutStream, seed: String) =>
     _out = out
-    _seed = seed
+    _seed = String.from_array(recover Array[U8].init(0, 32) end)
     _do_init()
 
   fun ref apply(line: String, prompt: Promise[String] tag) =>
     try
-      (let expect, let resp) = (_client_fsm as HandshakeClient).step(line)?
+      (let expect, let resp) = (_client_fsm as HandshakeClient).step(String.from_array(Base64.decode(line)?))?
       _out.print(Base64.encode(resp))
       prompt("Next message> ")
     else
@@ -138,9 +161,9 @@ class ClientNotify is ReadlineNotify
 
   fun ref _do_init() =>
     try
-      (let self_pk, let self_sk) = Sodium.ed25519_pair()?
+      (let self_pk, let self_sk) = Sodium.ed25519_pair_seed(_seed)?
       (_public, _secret) = (self_pk, self_sk)
-      (let other_pk, _) = Sodium.ed25519_pair()?
+      (let other_pk, _) = Sodium.ed25519_pair_seed(_seed)?
       _other_public = other_pk
       _client_fsm = HandshakeClient.create(
         self_pk,

@@ -117,6 +117,10 @@ primitive Sodium
         )
     end
 
+  // FIXME(borja): Maybe return a capability from this
+  // Since Sodium shouldn't be used without calling init first, we could
+  // return a capability here, and require it as an argument for every call,
+  // so we never forget to call it.
   fun init()? =>
     if \unlikely\ @sodium_init() == -1 then
       error
