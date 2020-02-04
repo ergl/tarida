@@ -70,24 +70,27 @@ actor Main
     try
       Sodium.init()?
       let config = Config(env)?
+      let seed = String.from_array(recover val Array[U8].init(0, 32) end)
       let notify = match config.mode
-      | Client => Input.client(env, config.seed)
-      | Server => Input.server(env, config.seed)
+      | Client => Input.client(env, seed)
+      | Server => Input.server(env, seed)
       end
       env.input(consume notify)
     end
 
 primitive Input
   fun client(env: Env, seed: String): InputNotify iso^ =>
-    let term = _make_ansiterm(env, recover ClientNotify(env.out, seed) end)
+    let act = ClientInput(env.out, seed)
+    let term = _make_ansiterm(env, ForwardNotify(act))
     env.out.print("Testing client")
-    term.prompt("Press enter to continue: ")
+    act.ready(term)
     _to_notify(term)
 
   fun server(env: Env, seed: String): InputNotify iso^ =>
-    let term = _make_ansiterm(env, recover ServerNotify(env.out, seed) end)
+    let act = ServerInput(env.out, seed)
+    let term = _make_ansiterm(env, ForwardNotify(act))
     env.out.print("Testing server")
-    term.prompt("Input client_hello: ")
+    act.ready(term)
     _to_notify(term)
 
   fun _make_ansiterm(env: Env, notify: ReadlineNotify iso): ANSITerm =>
@@ -100,22 +103,38 @@ primitive Input
       fun ref dispose() => term.dispose()
     end
 
-class ServerNotify is ReadlineNotify
+interface tag InputActor
+  be ready(term: ANSITerm)
+  be apply(line: String, prompt: Promise[String])
+
+class iso ForwardNotify is ReadlineNotify
+  let _dst: InputActor
+  fun ref tab(line: String val): Seq[String val] box => []
+  fun ref apply(line: String, prompt: Promise[String]) => _dst.apply(line, prompt)
+  new iso create(dst: InputActor) =>
+    _dst = dst
+
+actor ServerInput is InputActor
   let _out: OutStream
   let _seed: String
+
+  var _term: (ANSITerm|None) = None
 
   var _public: (Ed25519Public|None) = None
   var _secret: (Ed25519Secret|None) = None
 
   var _server_fsm: (HandshakeServer|None) = None
 
-  fun ref tab(line: String val): Seq[String val] box => []
   new create(out: OutStream, seed: String) =>
     _out = out
-    _seed = String.from_array(recover Array[U8].init(0, 32) end)
+    _seed = seed
+
+  be ready(term: ANSITerm) =>
+    _term = term
+    term.prompt("Input client_hello: ")
     _do_init()
 
-  fun ref apply(line: String, prompt: Promise[String] tag) =>
+  be apply(line: String, prompt: Promise[String]) =>
     try
       (let expect, let resp) = (_server_fsm as HandshakeServer).step(String.from_array(Base64.decode(line)?))?
       _out.print(Base64.encode(resp))
@@ -134,9 +153,11 @@ class ServerNotify is ReadlineNotify
       (_server_fsm as HandshakeServer).init()?
     end
 
-class ClientNotify is ReadlineNotify
+actor ClientInput is InputActor
   let _out: OutStream
   let _seed: String
+
+  var _term: (ANSITerm|None) = None
 
   var _public: (Ed25519Public|None) = None
   var _secret: (Ed25519Secret|None) = None
@@ -144,13 +165,16 @@ class ClientNotify is ReadlineNotify
 
   var _client_fsm: (HandshakeClient|None) = None
 
-  fun ref tab(line: String val): Seq[String val] box => []
   new create(out: OutStream, seed: String) =>
     _out = out
-    _seed = String.from_array(recover Array[U8].init(0, 32) end)
+    _seed = seed
+
+  be ready(term: ANSITerm) =>
+    _term = term
+    term.prompt("Press enter to continue: ")
     _do_init()
 
-  fun ref apply(line: String, prompt: Promise[String] tag) =>
+  be apply(line: String, prompt: Promise[String]) =>
     try
       (let expect, let resp) = (_client_fsm as HandshakeClient).step(String.from_array(Base64.decode(line)?))?
       _out.print(Base64.encode(resp))
