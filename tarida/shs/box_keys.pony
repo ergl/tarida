@@ -77,10 +77,8 @@ class iso BoxStream
     let enc_nonce = _enc_nonce.as_nonce().array()
     let dec_nonce = _dec_nonce.as_nonce().array()
 
-    let size = _enc_key.size()
-      + enc_nonce.size()
-      + _dec_key.size()
-      + dec_nonce.size()
+    let size = _enc_key.size() + enc_nonce.size() +
+                _dec_key.size() + dec_nonce.size()
 
     let arr = recover Array[U8].create(size) end
     arr.append(_enc_key.string().array())
