@@ -47,7 +47,7 @@ class iso BoxStream
     let packet = recover String.create(packet_size) end
 
     let raw_enc_body = Sodium.box_easy(msg, _enc_key.string(), body_nonce)?
-    let auth_tag = raw_enc_body.trim(0, 15)
+    let auth_tag = raw_enc_body.trim(0, 16)
     let enc_body = raw_enc_body.trim(16)
     let header = recover [as U8: (msg_size >> 8).u8(); msg_size.u8()].>append(auth_tag) end
     let enc_header = Sodium.box_easy(consume header, _enc_key.string(), header_nonce)?
@@ -58,7 +58,7 @@ class iso BoxStream
     let header_nonce = _dec_nonce.as_nonce(); _dec_nonce.next()
     let header = Sodium.box_easy_open(msg, _dec_key.string(), header_nonce)?
     if header.size() != 18 then error end // Spec
-    let raw_body_size = header.trim(0, 1) // First two bytes are the body size
+    let raw_body_size = header.trim(0, 2) // First two bytes are the body size
     // Convert back to USize
     let body_size = (raw_body_size(0)?.usize() << 8) + (raw_body_size(1)?.usize())
     let body_auth = header.trim(2)

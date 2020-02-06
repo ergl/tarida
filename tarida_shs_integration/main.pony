@@ -74,9 +74,10 @@ class iso ServerInput is BufferedInputNotify
   let _out: OutStream
   let _set_exit: Exit
 
+  let _netid: Array[U8] val
   let _public: Ed25519Public
   let _secret: Ed25519Secret
-  let _server_fsm: HandshakeServer
+  var _server_fsm: HandshakeServer
 
   new iso create(out: OutStream, exitcode: Exit, netid: String, public: Ed25519Public, secret: Ed25519Secret) =>
     _out = out
@@ -84,17 +85,26 @@ class iso ServerInput is BufferedInputNotify
 
     _public = public
     _secret = secret
-    _server_fsm = HandshakeServer.create(_public,_secret, netid.array())
-    try _server_fsm.init()? end
+    _netid = netid.array()
+    _server_fsm = HandshakeServer.create(_public, _secret, _netid)
+    try _server_fsm.init()? else Debug.err("bad server init") end
 
   fun ref apply(parent: BufferedInput ref, data: Array[U8] iso): Bool =>
     try
-      let msg = String.from_iso_array(consume data)
-      (let expect, let resp) = _server_fsm.step(String.from_array(Hex.decode(consume msg)?))?
-      _out.write(resp)
-      parent.expect(expect)?
-      true
+      (let expect, let resp) = _server_fsm.step(String.from_iso_array(consume data))?
+      if expect == 0 then
+        let server = _server_fsm = HandshakeServer(_public, _secret, _netid)
+        let boxstream = BoxKeys(consume server)?
+        let keys = boxstream.keys()
+        _out.write(keys)
+        false
+      else
+        _out.write(resp)
+        parent.expect(expect)?
+        true
+      end
     else
+      Debug.err("fail during step")
       _set_exit(1)
       false
     end
@@ -132,7 +142,6 @@ class iso ClientInput is BufferedInputNotify
     end
 
   fun ref apply(parent: BufferedInput ref, data: Array[U8] iso): Bool =>
-    Debug.err("received message")
     try
       let msg = String.from_iso_array(consume data)
       (let expect, let resp) = _client_fsm.step(String.from_array(Hex.decode(consume msg)?))?
@@ -141,10 +150,9 @@ class iso ClientInput is BufferedInputNotify
         let boxstream = BoxKeys(consume client)?
         let keys = boxstream.keys()
         _out.write(keys)
-        // Terminate upong SIGTERM
         false
       else
-        _out.print(resp)
+        _out.write(resp)
         parent.expect(expect)?
         true
       end

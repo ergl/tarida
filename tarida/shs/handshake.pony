@@ -133,7 +133,7 @@ primitive _Handshake
   fun hello_verify(msg: String, net_id: Array[U8] val): Curve25519Public? =>
     if msg.size() != 64 then error end
 
-    let other_hmac = msg.trim(0, 31)
+    let other_hmac = msg.trim(0, 32)
     let other_eph_pk = msg.trim(32) // until the end
 
     let valid = Sodium.auth_msg_verify(
@@ -252,7 +252,7 @@ primitive _Handshake
     let plain_text = Sodium.box_easy_open(enc, consume key, consume nonce)?
     if plain_text.size() != 96 then error end // Spec
 
-    let sign_detached = plain_text.trim(0, 63)
+    let sign_detached = plain_text.trim(0, 64)
     let client_id_pk = plain_text.trim(64) // until the end
 
     let hashed_ss = SHA256(short_term_ss.string())
