@@ -72,6 +72,22 @@ class iso BoxStream
     let enc_msg = recover String.create(msg_size).>append(body_auth).>append(msg) end
     Sodium.box_easy_open(consume enc_msg, _dec_key.string(), body_nonce)?
 
+  fun ref keys(): Array[U8] val =>
+    // FIXME(borja): Add `ifdef debug then` later
+    let enc_nonce = _enc_nonce.as_nonce().array()
+    let dec_nonce = _dec_nonce.as_nonce().array()
+
+    let size = _enc_key.size()
+      + enc_nonce.size()
+      + _dec_key.size()
+      + dec_nonce.size()
+
+    let arr = recover Array[U8].create(size) end
+    arr.append(_enc_key.string().array())
+    arr.append(enc_nonce)
+    arr.append(_dec_key.string().array())
+    arr.append(dec_nonce)
+    consume arr
 
 primitive BoxKeys
   fun apply(shs: (HandshakeServer | HandshakeClient)): BoxStream iso^? =>

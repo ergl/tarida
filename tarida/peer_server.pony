@@ -72,7 +72,7 @@ class iso _PeerListenNotify is TCPListenNotify
     : TCPConnectionNotify iso^
   =>
     Debug.out("_PeerListenNotify connected")
-    _PeerNotify(HandshakeServer(_pk, _sk))
+    _PeerNotify(HandshakeServer(_pk, _sk, DefaultNetworkId()))
 
   fun ref not_listening(listen: TCPListener ref) =>
     Debug.err("_PeerListenNotify not_listening")

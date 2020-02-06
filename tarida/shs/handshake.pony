@@ -76,9 +76,8 @@ class iso _BoxStreamDecNonce is _InPlaceNonce
   fun _get_inner(): U32 => current
   fun ref next(): U32 => current = (current + 1).mod(_get_limit())
 
-// TODO(borja): Plug integration tests from https://github.com/AljoschaMeyer/shs1-test
-primitive _Handshake
-  fun network_id(): Array[U8] val =>
+primitive DefaultNetworkId
+  fun apply(): Array[U8] val =>
     [as U8: 0xd4; 0xa1; 0xcb; 0x88
             0xa6; 0x6f; 0x02; 0xf8
             0xdb; 0x63; 0x5c; 0xe2
@@ -88,15 +87,17 @@ primitive _Handshake
             0x08; 0x39; 0xb7; 0x55
             0x84; 0x5a; 0x9f; 0xfb]
 
-  fun hello_challenge(pk: Curve25519Public): String? =>
-    let auth = Sodium.auth_msg(pk.string(), network_id())?
+// TODO(borja): Plug integration tests from https://github.com/AljoschaMeyer/shs1-test
+primitive _Handshake
+  fun hello_challenge(pk: Curve25519Public, net_id: Array[U8] val): String? =>
+    let auth = Sodium.auth_msg(pk.string(), net_id)?
     recover
       String.create(auth.size() + pk.size())
             .>append(auth)
             .>append(pk)
     end
 
-  fun hello_verify(msg: String): Curve25519Public? =>
+  fun hello_verify(msg: String, net_id: Array[U8] val): Curve25519Public? =>
     if msg.size() != 64 then error end
 
     let other_hmac = msg.trim(0, 31)
@@ -105,7 +106,7 @@ primitive _Handshake
     let valid = Sodium.auth_msg_verify(
       where auth_tag = other_hmac,
       msg = other_eph_pk,
-      key = network_id()
+      key = net_id
     )
 
     if not valid then error end
@@ -154,11 +155,11 @@ primitive _Handshake
   fun client_detached_sign(
     server_pk: Ed25519Public,
     id_sk: Ed25519Secret,
-    short_term_ss: _SharedSecret1)
+    short_term_ss: _SharedSecret1,
+    net_id: Array[U8] val)
     : _ClientDetachedSign?
   =>
 
-    let net_id = network_id()
     let hashed_ss = SHA256(short_term_ss.string())
     let msg_size = net_id.size() + server_pk.size() + hashed_ss.size()
     let msg = recover
@@ -175,10 +176,11 @@ primitive _Handshake
     detached_sign: _ClientDetachedSign,
     id_pk: Ed25519Public,
     short_term_ss: _SharedSecret1,
-    long_term_ss: _SharedSecret2)
+    long_term_ss: _SharedSecret2,
+    net_id: Array[U8] val)
     : String?
   =>
-    let net_id = network_id()
+
     let msg = recover
       String.create(detached_sign.size() + id_pk.size())
             .>append(detached_sign.string())
@@ -199,11 +201,11 @@ primitive _Handshake
     enc: String,
     id_pk: Ed25519Public,
     short_term_ss: _SharedSecret1,
-    long_term_ss: _SharedSecret2)
+    long_term_ss: _SharedSecret2,
+    net_id: Array[U8] val)
     : (_ClientDetachedSign, Ed25519Public)?
   =>
 
-    let net_id = network_id()
     // OK to use since this is the only time we encrypt this message
     let nonce = recover Array[U8].init(0, 24) end
     let key_raw = recover
@@ -253,11 +255,11 @@ primitive _Handshake
     server_id_sk: Ed25519Secret,
     client_id_pk: Ed25519Public,
     client_sign: _ClientDetachedSign,
-    short_term_ss: _SharedSecret1)
+    short_term_ss: _SharedSecret1,
+    net_id: Array[U8] val)
     : _ServerDetachedSign?
   =>
 
-    let net_id = network_id()
     let hashed_ss = SHA256(short_term_ss.string())
     let msg_size = net_id.size() + client_sign.size() + client_id_pk.size() + hashed_ss.size()
     let msg = recover
@@ -275,11 +277,11 @@ primitive _Handshake
     server_sign: _ServerDetachedSign,
     short_term_ss: _SharedSecret1,
     long_term_ss_1: _SharedSecret2,
-    long_term_ss_2: _SharedSecret3)
+    long_term_ss_2: _SharedSecret3,
+    net_id: Array[U8] val)
     : String?
   =>
 
-    let net_id = network_id()
     let key_size = net_id.size() + short_term_ss.size() + long_term_ss_1.size() + long_term_ss_2.size()
     let raw_key = recover
       String.create(key_size)
@@ -301,10 +303,11 @@ primitive _Handshake
     client_sign: _ClientDetachedSign,
     short_term_ss: _SharedSecret1,
     long_term_ss_1: _SharedSecret2,
-    long_term_ss_2: _SharedSecret3)
+    long_term_ss_2: _SharedSecret3,
+    net_id: Array[U8] val)
     : _ServerDetachedSign?
   =>
-    let net_id = network_id()
+
     // OK to use since this is the only time we encrypt this message
     let nonce = recover Array[U8].init(0, 24) end
     let key_size = net_id.size() + short_term_ss.size() + long_term_ss_1.size() + long_term_ss_2.size()
@@ -341,13 +344,12 @@ primitive _Handshake
   fun make_secret(
     ss_1: _SharedSecret1,
     ss_2: _SharedSecret2,
-    ss_3: _SharedSecret3)
-    : _BareBoxStreamSecret?
+    ss_3: _SharedSecret3,
+    net_id: Array[U8] val)
+    : _BareBoxStreamSecret
   =>
 
-    let net_id = network_id()
     let msg_size = net_id.size() + ss_1.size() + ss_2.size() + ss_3.size()
-    if msg_size != 1024 then error end // Spec
     let msg = recover
       String.create(msg_size)
             .>append(ss_1.string())
@@ -362,11 +364,11 @@ primitive _Handshake
     self_id_pk: Ed25519Public,
     other_id_pk: Ed25519Public,
     self_eph_pk: Curve25519Public,
-    other_eph_pk: Curve25519Public)
+    other_eph_pk: Curve25519Public,
+    net_id: Array[U8] val)
     : BoxStream^?
   =>
 
-    let net_id = network_id()
     let enc_k = String.from_array(SHA256(recover
       String.create(secret.size() + other_id_pk.size())
             .>append(secret.string())

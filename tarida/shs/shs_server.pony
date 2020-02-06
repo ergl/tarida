@@ -7,6 +7,8 @@ primitive _ServerDone
 type _ServerFSM is (_ClientHello | _ClientAuth | _ServerDone)
 
 class iso HandshakeServer
+  let _network_id: Array[U8] val
+
   var _state: _ServerFSM
 
   let _id_pk: Ed25519Public
@@ -26,7 +28,12 @@ class iso HandshakeServer
   var _client_detached_sign: (_ClientDetachedSign | None) = None
   var _server_detached_sign: (_ServerDetachedSign | None) = None
 
-  new iso create(pk: Ed25519Public, sk: Ed25519Secret) =>
+  new iso create(
+    pk: Ed25519Public,
+    sk: Ed25519Secret,
+    network_id: Array[U8] val)
+  =>
+    _network_id = network_id
     _id_pk = pk
     _id_sk = sk
     _state = _ClientHello
@@ -64,19 +71,21 @@ class iso HandshakeServer
     let secret = _Handshake.make_secret(
       _shared_secret_1 as _SharedSecret1,
       _shared_secret_2 as _SharedSecret2,
-      _shared_secret_3 as _SharedSecret3
-    )?
+      _shared_secret_3 as _SharedSecret3,
+      _network_id
+    )
 
     _Handshake.make_box_keys(
       secret,
       _id_pk,
       _other_id_pk as Ed25519Public,
       _eph_pk as Curve25519Public,
-      _other_eph_pk as Curve25519Public
+      _other_eph_pk as Curve25519Public,
+      _network_id
     )?
 
   fun ref _verify_hello(msg: String)? =>
-    let other_eph_pk = _Handshake.hello_verify(msg)?
+    let other_eph_pk = _Handshake.hello_verify(msg, _network_id)?
     let secrets = _Handshake.server_derive_secret_1(
       _id_sk,
       _eph_sk as Curve25519Secret,
@@ -88,14 +97,15 @@ class iso HandshakeServer
     _shared_secret_2 = secrets._2
 
   fun _server_hello(): String? =>
-    _Handshake.hello_challenge(_eph_pk as Curve25519Public)?
+    _Handshake.hello_challenge(_eph_pk as Curve25519Public, _network_id)?
 
   fun ref _verify_client_auth(msg: String)? =>
     let results = _Handshake.client_auth_verify(
       msg,
       _id_pk,
       _shared_secret_1 as _SharedSecret1,
-      _shared_secret_2 as _SharedSecret2
+      _shared_secret_2 as _SharedSecret2,
+      _network_id
     )?
 
     _client_detached_sign = results._1
@@ -112,7 +122,8 @@ class iso HandshakeServer
         _id_sk,
         _other_id_pk as Ed25519Public,
         _client_detached_sign as _ClientDetachedSign,
-        shared_secret_1
+        shared_secret_1,
+        _network_id
     )?
 
     _server_detached_sign = sign
@@ -123,5 +134,6 @@ class iso HandshakeServer
       sign,
       shared_secret_1,
       shared_secret_2,
-      shared_secret_3
+      shared_secret_3,
+      _network_id
     )?

@@ -11,6 +11,8 @@ type _ClientFSM is (_Init | _ServerHello | _ServerAccept | _ClientDone)
 // Also, consider changing the implementation to use type states,
 // aking to something like http://cliffle.com/blog/rust-typestate/
 class iso HandshakeClient
+  let _network_id: Array[U8] val
+
   var _state: _ClientFSM
 
   let _id_pk: Ed25519Public
@@ -29,7 +31,13 @@ class iso HandshakeClient
   var _self_detached_sign: (_ClientDetachedSign | None) = None
   var _server_detached_sign: (_ServerDetachedSign | None) = None
 
-  new iso create(pk: Ed25519Public, sk: Ed25519Secret, other_id_pk: Ed25519Public) =>
+  new iso create(
+    pk: Ed25519Public,
+    sk: Ed25519Secret,
+    other_id_pk: Ed25519Public,
+    network_id: Array[U8] val)
+  =>
+    _network_id = network_id
     _id_pk = pk
     _id_sk = sk
     _other_id_pk = other_id_pk
@@ -62,24 +70,26 @@ class iso HandshakeClient
     let secret = _Handshake.make_secret(
       _shared_secret_1 as _SharedSecret1,
       _shared_secret_2 as _SharedSecret2,
-      _shared_secret_3 as _SharedSecret3
-    )?
+      _shared_secret_3 as _SharedSecret3,
+      _network_id
+    )
 
     _Handshake.make_box_keys(
       secret,
       _id_pk,
       _other_id_pk,
       _eph_pk as Curve25519Public,
-      _other_eph_pk as Curve25519Public
+      _other_eph_pk as Curve25519Public,
+      _network_id
     )?
 
   fun ref _client_hello(): String? =>
     let eph_pair = Sodium.curve25519_pair()?
     (_eph_pk, _eph_sk) = eph_pair
-    _Handshake.hello_challenge(eph_pair._1)?
+    _Handshake.hello_challenge(eph_pair._1, _network_id)?
 
   fun ref _verify_hello(msg: String)? =>
-    let other_eph_pk = _Handshake.hello_verify(msg)?
+    let other_eph_pk = _Handshake.hello_verify(msg, _network_id)?
     let secrets = _Handshake.client_derive_secret_1(
       _eph_sk as Curve25519Secret,
       other_eph_pk, // Notice server's public key here
@@ -99,9 +109,9 @@ class iso HandshakeClient
     let short_term_ss = _shared_secret_1 as _SharedSecret1
     let long_term_ss = _shared_secret_2 as _SharedSecret2
 
-    let detached_sign = _Handshake.client_detached_sign(_other_id_pk, _id_sk, short_term_ss)?
+    let detached_sign = _Handshake.client_detached_sign(_other_id_pk, _id_sk, short_term_ss, _network_id)?
     _self_detached_sign = detached_sign
-    _Handshake.client_auth(detached_sign, _id_pk, short_term_ss, long_term_ss)?
+    _Handshake.client_auth(detached_sign, _id_pk, short_term_ss, long_term_ss, _network_id)?
 
   fun ref _verify_server_accept(msg: String)? =>
     _server_detached_sign = _Handshake.server_accept_verify(
@@ -111,5 +121,6 @@ class iso HandshakeClient
       client_sign = _self_detached_sign as _ClientDetachedSign,
       short_term_ss = _shared_secret_1 as _SharedSecret1,
       long_term_ss_1 = _shared_secret_2 as _SharedSecret2,
-      long_term_ss_2 = _shared_secret_3 as _SharedSecret3
+      long_term_ss_2 = _shared_secret_3 as _SharedSecret3,
+      net_id = _network_id
     )?

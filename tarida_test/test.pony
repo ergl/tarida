@@ -24,8 +24,8 @@ class iso _TestSHS is UnitTest
     (let spk, let ssk) = Sodium.ed25519_pair()?
     (let cpk, let csk) = Sodium.ed25519_pair()?
 
-    _shs_server = HandshakeServer(spk, ssk).>init()?
-    _shs_client = HandshakeClient(cpk, csk, spk)
+    _shs_server = HandshakeServer(spk, ssk, DefaultNetworkId()).>init()?
+    _shs_client = HandshakeClient(cpk, csk, spk, DefaultNetworkId())
 
     (_server_public, _server_secret) = (spk, ssk)
     (_client_public, _client_secret) = (cpk, csk)
@@ -61,5 +61,24 @@ class iso _TestSHS is UnitTest
 
     try (_shs_client as HandshakeClient).step("")?; h.fail()
     else h.assert_true(true) end
+
+  var maybe_client = try
+      _shs_client = HandshakeClient(
+        _client_public as Ed25519Public,
+        _client_secret as Ed25519Secret,
+        _server_public as Ed25519Public,
+        DefaultNetworkId()
+      )
+    else
+      None
+  end
+
+  match (maybe_client = None)
+  | let c: HandshakeClient =>
+      try
+        let keys = BoxKeys(consume c)?.keys()
+        h.assert_eq[USize](112, keys.size())
+      else h.assert_true(false) end
+  end
 
   else h.fail() end
