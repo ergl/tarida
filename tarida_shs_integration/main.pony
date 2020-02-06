@@ -143,8 +143,7 @@ class iso ClientInput is BufferedInputNotify
 
   fun ref apply(parent: BufferedInput ref, data: Array[U8] iso): Bool =>
     try
-      let msg = String.from_iso_array(consume data)
-      (let expect, let resp) = _client_fsm.step(String.from_array(Hex.decode(consume msg)?))?
+      (let expect, let resp) = _client_fsm.step(String.from_iso_array(consume data))?
       if expect == 0 then
         let client = _client_fsm = HandshakeClient(_public, _secret, _other_public, _netid)
         let boxstream = BoxKeys(consume client)?

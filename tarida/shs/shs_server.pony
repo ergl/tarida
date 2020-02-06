@@ -54,13 +54,13 @@ class iso HandshakeServer
     | _ClientHello =>
       _verify_hello(msg)?
       _state = _ClientAuth
-      Debug.out("HandshakeServer _ClientHello")
+      Debug.err("HandshakeServer _ClientHello")
       (112, _server_hello()?)
 
     | _ClientAuth =>
       _verify_client_auth(msg)?
       _state = _ServerDone
-      Debug.out("HandshakeServer _ClientAuth")
+      Debug.err("HandshakeServer _ClientAuth")
       (0, _server_accept()?)
     | _ServerDone => error // Shouldn't reuse the server
     end
