@@ -1,8 +1,6 @@
-// Follow from https://github.com/AljoschaMeyer/shs1-test
-// Convert from Readline into normal input/output, with expect
-
 use "debug"
 use "cli"
+use "signals"
 use "promises"
 use "package:../tarida/shs"
 use "package:../tarida/sodium"
@@ -41,11 +39,21 @@ primitive Config
       error
     end
 
+class SigTermHandler is SignalNotify
+  let _input: InputStream
+  new iso create(input: InputStream) => _input = input
+  fun ref apply(count: U32): Bool =>
+    _input.dispose()
+    false
+
+type Exit is {(I32)} val
+
 actor Main
   new create(env: Env) =>
     try
       Sodium.init()?
       let config = Config(env)?
+      let signal = SignalHandler(SigTermHandler(env.input), Sig.term())
       let notify = match config
       | let c: ClientConfig =>
         (let pk, let sk) = Sodium.ed25519_pair()?
@@ -57,20 +65,23 @@ actor Main
 
 primitive Input
   fun client(env: Env, c: ClientConfig, pk: Ed25519Public, sk: Ed25519Secret): InputNotify iso^ =>
-    Buffer(env.input, ClientInput(env.out, c.netid, pk, sk, c.server_id_pk), 64)
+    Buffer(env.input, ClientInput(env.out, env.exitcode, c.netid, pk, sk, c.server_id_pk), 64)
 
   fun server(env: Env, c: ServerConfig): InputNotify iso^ =>
-    Buffer(env.input, ServerInput(env.out, c.netid, c.server_id_pk, c.server_id_sk))
+    Buffer(env.input, ServerInput(env.out, env.exitcode, c.netid, c.server_id_pk, c.server_id_sk))
 
 class iso ServerInput is BufferedInputNotify
   let _out: OutStream
+  let _set_exit: Exit
 
   let _public: Ed25519Public
   let _secret: Ed25519Secret
   let _server_fsm: HandshakeServer
 
-  new iso create(out: OutStream, netid: String, public: Ed25519Public, secret: Ed25519Secret) =>
+  new iso create(out: OutStream, exitcode: Exit, netid: String, public: Ed25519Public, secret: Ed25519Secret) =>
     _out = out
+    _set_exit = exitcode
+
     _public = public
     _secret = secret
     _server_fsm = HandshakeServer.create(_public,_secret, netid.array())
@@ -84,11 +95,13 @@ class iso ServerInput is BufferedInputNotify
       parent.expect(expect)?
       true
     else
+      _set_exit(1)
       false
     end
 
 class iso ClientInput is BufferedInputNotify
   let _out: OutStream
+  let _set_exit: Exit
 
   let _public: Ed25519Public
   let _secret: Ed25519Secret
@@ -96,13 +109,18 @@ class iso ClientInput is BufferedInputNotify
   let _netid: Array[U8] val
   var _client_fsm: HandshakeClient
 
-  new iso create(out: OutStream,
-             netid: String,
-             public: Ed25519Public,
-             secret: Ed25519Secret,
-             other: Ed25519Public) =>
+  new iso create(
+    out: OutStream,
+    exitcode: Exit,
+    netid: String,
+    public: Ed25519Public,
+    secret: Ed25519Secret,
+    other: Ed25519Public)
+  =>
 
     _out = out
+    _set_exit = exitcode
+
     _public = public
     _secret = secret
     _other_public = other
@@ -111,11 +129,10 @@ class iso ClientInput is BufferedInputNotify
     try
       (let _, let resp) = _client_fsm.step("")?
       _out.write(resp)
-    else
-      Debug.err("oops")
     end
 
   fun ref apply(parent: BufferedInput ref, data: Array[U8] iso): Bool =>
+    Debug.err("received message")
     try
       let msg = String.from_iso_array(consume data)
       (let expect, let resp) = _client_fsm.step(String.from_array(Hex.decode(consume msg)?))?
@@ -132,5 +149,6 @@ class iso ClientInput is BufferedInputNotify
         true
       end
     else
+      _set_exit(1)
       false
     end

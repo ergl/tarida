@@ -47,18 +47,18 @@ class iso HandshakeClient
     match _state
     | _Init =>
       _state = _ServerHello
-      Debug.out("HandshakeClient _Init")
+      Debug.err("HandshakeClient _Init")
       (64, _client_hello()?)
 
     | _ServerHello =>
       _verify_hello(msg)?
       _state = _ServerAccept
-      Debug.out("HandshakeClient _ServerHello")
+      Debug.err("HandshakeClient _ServerHello")
       (80, _client_auth()?)
 
     | _ServerAccept =>
       _state = _ClientDone
-      Debug.out("HandshakeClient _ServerAccept")
+      Debug.err("HandshakeClient _ServerAccept")
       (0, "")
 
     | _ClientDone => error // Shouldn't reuse the client
