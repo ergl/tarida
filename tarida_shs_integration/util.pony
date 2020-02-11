@@ -5,7 +5,7 @@ primitive Hex
   fun decode(s: String): Array[U8] iso^? =>
     let size = s.size()
     if (size and 0x01) != 0 then error end
-    let arr = recover Array[U8].create(size >> 1) end
+    let arr = recover Array[U8].init(0, size / 2) end
 
     var j: USize = 0
     while j < size do
@@ -20,8 +20,8 @@ primitive Hex
         error
       end
 
-      arr.push(value << (((j + 1) % 2) * 4).u8())
-      j = j + 2
+      arr(j/2)? = arr(j/2)? + (value << (((j + 1) % 2) * 4).u8())
+      j = j + 1
     end
     consume arr
 

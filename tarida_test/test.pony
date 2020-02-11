@@ -1,12 +1,29 @@
 use "ponytest"
+use "ponycheck"
+
 use "package:../tarida/shs"
 use "package:../tarida/sodium"
+use "package:../tarida_shs_integration"
 
 actor Main is TestList
   new make() => None
   new create(env: Env) => PonyTest(env, this)
   fun tag tests(test: PonyTest) =>
     test(_TestSHS)
+    test(Property1UnitTest[Array[U8]](_TestHexProperty))
+
+class iso _TestHexProperty is Property1[Array[U8]]
+  fun name(): String => "hex/property"
+
+  fun gen(): Generator[Array[U8]] =>
+    Generators.array_of[U8](Generators.u8() where min = 64, max = 64)
+
+  fun property(arg1: Array[U8], ph: PropertyHelper) =>
+    try
+      ph.assert_array_eq[U8](arg1, Hex.decode(Hex.encode(arg1))?)
+    else
+      ph.fail()
+    end
 
 class iso _TestSHS is UnitTest
   var _server_public: (Ed25519Public | None) = None
