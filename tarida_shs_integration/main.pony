@@ -90,23 +90,33 @@ class iso ServerInput is BufferedInputNotify
     try _server_fsm.init()? else Debug.err("bad server init") end
 
   fun ref apply(parent: BufferedInput ref, data: Array[U8] iso): Bool =>
-    try
-      (let expect, let resp) = _server_fsm.step(String.from_iso_array(consume data))?
-      if expect == 0 then
-        let server = _server_fsm = HandshakeServer(_public, _secret, _netid)
-        let boxstream = BoxKeys(consume server)?
-        let keys = boxstream.keys()
-        _out.write(keys)
-        false
-      else
-        _out.write(resp)
-        parent.expect(expect)?
-        true
-      end
+    let maybe_response = try
+      _server_fsm.step(String.from_iso_array(consume data))?
     else
-      Debug.err("fail during step")
+      None
+    end
+
+    match maybe_response
+    | None =>
+      Debug.err("Error while stepping")
       _set_exit(1)
       false
+
+    | (let expect: USize, let response: String) =>
+      Debug.err("successful step, should print " + response.size().string() + " bytes")
+      _out.write(response)
+      _out.flush()
+      if expect != 0 then
+        try parent.expect(expect)? else Debug.err("error while expecting") end
+        true
+      else
+        let server = _server_fsm = HandshakeServer(_public, _secret, _netid)
+        let maybe_keys = try BoxKeys(consume server)?.keys() else Debug.err("boxkeys error"); None end
+        match maybe_keys
+        | let keys: Array[U8] val => _out.write(keys)
+        else None end
+        false
+      end
     end
 
 class iso ClientInput is BufferedInputNotify
