@@ -51,7 +51,9 @@ class iso Buffer is (InputNotify & BufferedInput)
       end
 
       // Recursive if extra is still larger than the threshold
-      this.apply(consume extra)
+      if extra.size() > 0 then
+        this.apply(consume extra)
+      end
     else
       _buffer.append(consume data)
     end
