@@ -58,6 +58,7 @@ class iso HandshakeClient
 
     | _ServerAccept =>
       _state = _ClientDone
+      _verify_server_accept(msg)?
       Debug.err("HandshakeClient _ServerAccept")
       (0, "")
 

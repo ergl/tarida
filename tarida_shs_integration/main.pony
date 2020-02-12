@@ -149,6 +149,7 @@ class iso ClientInput is BufferedInputNotify
     try
       (let _, let resp) = _client_fsm.step("")?
       _out.write(resp)
+      _out.flush()
     end
 
   fun ref apply(parent: BufferedInput ref, data: Array[U8] iso): Bool =>
@@ -159,9 +160,11 @@ class iso ClientInput is BufferedInputNotify
         let boxstream = BoxKeys(consume client)?
         let keys = boxstream.keys()
         _out.write(keys)
+        _out.flush()
         false
       else
         _out.write(resp)
+        _out.flush()
         parent.expect(expect)?
         true
       end
