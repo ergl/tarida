@@ -79,23 +79,23 @@ class iso _TestSHS is UnitTest
     try (_shs_client as HandshakeClient).step("")?; h.fail()
     else h.assert_true(true) end
 
-  var maybe_client = try
-      _shs_client = HandshakeClient(
-        _client_public as Ed25519Public,
-        _client_secret as Ed25519Secret,
-        _server_public as Ed25519Public,
-        DefaultNetworkId()
-      )
-    else
-      None
-  end
+    var maybe_client = try
+        _shs_client = HandshakeClient(
+          _client_public as Ed25519Public,
+          _client_secret as Ed25519Secret,
+          _server_public as Ed25519Public,
+          DefaultNetworkId()
+        )
+      else
+        None
+    end
 
-  match (maybe_client = None)
-  | let c: HandshakeClient =>
-      try
-        let keys = BoxKeys(consume c)?.keys()
-        h.assert_eq[USize](112, keys.size())
-      else h.assert_true(false) end
-  end
+    match (maybe_client = None)
+    | let c: HandshakeClient =>
+        try
+          let keys = BoxKeys(consume c)?.keys()
+          h.assert_eq[USize](112, keys.size())
+        else h.assert_true(false) end
+    end
 
   else h.fail() end
