@@ -48,6 +48,10 @@ class SigTermHandler is SignalNotify
 
 type Exit is {(I32)} val
 
+primitive SodiumSeed
+  fun apply(): String =>
+    "36653997583271783959020165376505"
+
 actor Main
   new create(env: Env) =>
     try
@@ -56,7 +60,7 @@ actor Main
       let signal = SignalHandler(SigTermHandler(env.input), Sig.term())
       let notify = match config
       | let c: ClientConfig =>
-        (let pk, let sk) = Sodium.ed25519_pair()?
+        (let pk, let sk) = Sodium.ed25519_pair_seed(SodiumSeed())?
         Input.client(env, c, pk, sk)
       | let c: ServerConfig => Input.server(env, c)
       end
@@ -147,7 +151,7 @@ class iso ClientInput is BufferedInputNotify
     _netid = netid.array()
     _client_fsm = HandshakeClient(_public, _secret, _other_public, _netid)
     try
-      (let _, let resp) = _client_fsm.step("")?
+      (let _, let resp) = _client_fsm.step(SodiumSeed())?
       _out.write(resp)
       _out.flush()
     end

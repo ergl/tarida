@@ -48,7 +48,7 @@ class iso HandshakeClient
     | _Init =>
       _state = _ServerHello
       Debug.err("HandshakeClient _Init")
-      (64, _client_hello()?)
+      (64, _client_hello(msg)?)
 
     | _ServerHello =>
       _verify_hello(msg)?
@@ -84,8 +84,8 @@ class iso HandshakeClient
       _network_id
     )?
 
-  fun ref _client_hello(): String? =>
-    let eph_pair = Sodium.curve25519_pair()?
+  fun ref _client_hello(seed: String): String? =>
+    let eph_pair = Sodium.curve25519_pair_seed(seed)?
     (_eph_pk, _eph_sk) = eph_pair
     _Handshake.hello_challenge(eph_pair._1, _network_id)?
 
