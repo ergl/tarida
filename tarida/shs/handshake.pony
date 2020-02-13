@@ -120,7 +120,6 @@ primitive DefaultNetworkId
             0x08; 0x39; 0xb7; 0x55
             0x84; 0x5a; 0x9f; 0xfb]
 
-// TODO(borja): Plug integration tests from https://github.com/AljoschaMeyer/shs1-test
 primitive _Handshake
   fun hello_challenge(pk: Curve25519Public, net_id: Array[U8] val): String? =>
     let auth = Sodium.auth_msg(pk.string(), net_id)?
