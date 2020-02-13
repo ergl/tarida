@@ -32,8 +32,8 @@ primitive Config
       ClientConfig(netid, Ed25519Public(consume server_pk))
     elseif args.size() == 4 then
       let netid = String.from_array(Hex.decode(args(1)?)?)
-      let server_pk = Hex.decode(args(2)?)?
-      let server_sk = Hex.decode(args(3)?)?
+      let server_sk = Hex.decode(args(2)?)?
+      let server_pk = Hex.decode(args(3)?)?
       ServerConfig(netid, Ed25519Public(consume server_pk), Ed25519Secret(consume server_sk))
     else
       error
@@ -91,7 +91,7 @@ class iso ServerInput is BufferedInputNotify
     _secret = secret
     _netid = netid.array()
     _server_fsm = HandshakeServer.create(_public, _secret, _netid)
-    try _server_fsm.init()? else Debug.err("bad server init") end
+    try _server_fsm.init_seed(SodiumSeed())? else Debug.err("bad server init") end
 
   fun ref apply(parent: BufferedInput ref, data: Array[U8] iso): Bool =>
     let maybe_response = try

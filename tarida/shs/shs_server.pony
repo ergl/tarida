@@ -46,6 +46,10 @@ class iso HandshakeServer
     (_eph_pk, _eph_sk) = Sodium.curve25519_pair()?
     64
 
+  fun ref init_seed(seed: String): USize? =>
+    (_eph_pk, _eph_sk) = Sodium.curve25519_pair_seed(seed)?
+    64
+
   // Return the number of bytes to expect for the next call, along
   // with the output of this step. If the byte size is 0, we're done
   // It might error if some of the verifications are wrong
