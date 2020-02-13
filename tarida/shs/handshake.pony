@@ -385,6 +385,7 @@ primitive _Handshake
     let msg_size = net_id.size() + ss_1.size() + ss_2.size() + ss_3.size()
     let msg = recover
       String.create(msg_size)
+            .>append(String.from_array(net_id))
             .>append(ss_1.string())
             .>append(ss_2.string())
             .>append(ss_3.string())
