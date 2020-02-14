@@ -145,6 +145,13 @@ primitive _Handshake
     Curve25519Public(other_eph_pk.clone().iso_array())
 
   // Must be only called from server
+  // TODO(borja): Use a server capability for this
+  // We can have an `init_server` function that returns
+  // a server capability that can be used to auth against
+  // server-only functions.
+  // We can do the same for the functions that only the
+  // client can execute. Probably can also link this to
+  // the type-state pattern.
   fun server_derive_secret_1(
     id_sk: Ed25519Secret,
     eph_sk: Curve25519Secret,
@@ -165,6 +172,7 @@ primitive _Handshake
     (_SharedSecret1(short_term_ss), _SharedSecret2(long_term_ss))
 
   // Must be only called from client
+  // See note on server_derive_secret_1
   fun client_derive_secret_1(
     eph_sk: Curve25519Secret,
     other_eph_pk: Curve25519Public,
