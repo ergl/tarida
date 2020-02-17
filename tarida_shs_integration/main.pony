@@ -109,7 +109,7 @@ class iso ServerInput is BufferedInputNotify
         true
       else
         let server = _server_fsm = HandshakeServer(_public, _secret, _netid)
-        let maybe_keys = try BoxKeys(consume server)?.keys() else Debug.err("boxkeys error"); None end
+        let maybe_keys = try server.boxstream()?.keys() else Debug.err("boxkeys error"); None end
         match maybe_keys
         | let keys: Array[U8] val => _out.write(keys)
         else None end
@@ -155,7 +155,7 @@ class iso ClientInput is BufferedInputNotify
       (let expect, let resp) = _client_fsm.step(String.from_iso_array(consume data))?
       if expect == 0 then
         let client = _client_fsm = HandshakeClient(_public, _secret, _other_public, _netid)
-        let boxstream = BoxKeys(consume client)?
+        let boxstream = client.boxstream()?
         let keys = boxstream.keys()
         _out.write(keys)
         _out.flush()

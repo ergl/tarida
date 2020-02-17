@@ -86,7 +86,3 @@ class iso BoxStream
     arr.append(_dec_key.string().array())
     arr.append(dec_nonce)
     consume arr
-
-primitive BoxKeys
-  fun apply(shs: (HandshakeServer | HandshakeClient)): BoxStream iso^? =>
-    shs._full_secret()?

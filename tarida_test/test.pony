@@ -93,7 +93,7 @@ class iso _TestSHS is UnitTest
     match (maybe_client = None)
     | let c: HandshakeClient =>
         try
-          let keys = BoxKeys(consume c)?.keys()
+          let keys = c.boxstream()?.keys()
           h.assert_eq[USize](112, keys.size())
         else h.assert_true(false) end
     end

@@ -65,7 +65,7 @@ class iso HandshakeClient
     | _ClientDone => error // Shouldn't reuse the client
     end
 
-  fun _full_secret(): BoxStream^? =>
+  fun boxstream(): BoxStream^? =>
     if _state isnt _ClientDone then error end
 
     let secret = _Handshake.make_secret(
