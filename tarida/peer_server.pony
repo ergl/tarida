@@ -46,27 +46,34 @@ class iso _BoxStreamNotify is TCPConnectionNotify
     try
       match _state
       | _BoxStreamExpectHeader =>
+        Debug.out("_BoxStreamNotify recv header of size " + msg.size().string())
         let result = _boxstream.decrypt_header(consume msg)?
         match result
         | None =>
           // goodbye
           Debug.out("Recv a goodbye")
           conn.close()
+
         | (let next_expect: USize, let auth_tag: String) =>
+            Debug.out("_BoxStreamNotify should expect body of size " + next_expect.string())
             conn.expect(next_expect)?
             _state = _BoxStreamExpectBody(auth_tag)
         end
 
       | let info: _BoxStreamExpectBody =>
         let plaintext = _boxstream.decrypt(info.auth_tag, msg)?
-        Debug.out("Recv plaintext " + plaintext)
+        Debug.out("Recv plaintext: " + plaintext)
+
+        conn.expect(_boxstream.header_size())?
+        _state = _BoxStreamExpectHeader
       end
+
+      true
     else
       conn.close()
       Debug.err("Error: _BoxStreamNotify bad recv")
+      false
     end
-
-    true
 
   fun ref expect(conn: TCPConnection ref, qty: USize): USize =>
     // TODO(borja): Figure out if we must do something here
