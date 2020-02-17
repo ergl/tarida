@@ -10,11 +10,71 @@ use "debug"
 // The next layer is the RPC mechanism, which also handles framing.
 // The RPC layer can either be the final layer, or delegate RPC header parsing to another notifier.
 
-// Consider doing SHS inside notify, instead of using
-// a different actor. This way, when we finish the SHS,
-// we can set a new notify, and pass all the derived keys
-// from it. With an actor server, we don't know its lifetime
-// after the SHS has finished.
+primitive _BoxStreamExpectHeader
+class val _BoxStreamExpectBody
+  let auth_tag: String
+  new val create(other_tag: String) =>
+    auth_tag = other_tag
+
+type _BoxStreamNotifyState is (_BoxStreamExpectHeader | _BoxStreamExpectBody)
+
+class iso _BoxStreamNotify is TCPConnectionNotify
+  let _boxstream: BoxStream
+  var _state: _BoxStreamNotifyState
+
+  new iso create(boxtream: BoxStream iso) =>
+    _boxstream = consume boxtream
+    _state = _BoxStreamExpectHeader
+
+  fun ref connect_failed(conn: TCPConnection ref) => None
+
+  fun ref sent(conn: TCPConnection ref, data: ByteSeq): ByteSeq =>
+    // TODO(borja): Encrypt data here. Must return the transformed data
+    data
+
+  fun ref sentv(conn: TCPConnection ref, data: ByteSeqIter): ByteSeqIter =>
+    // TODO(borja): Encrypt data here. Will this be used?
+    data
+
+  fun ref received(
+    conn: TCPConnection ref,
+    data: Array[U8] iso,
+    times: USize)
+    : Bool
+  =>
+    let msg = String.from_array(consume data)
+    try
+      match _state
+      | _BoxStreamExpectHeader =>
+        let result = _boxstream.decrypt_header(consume msg)?
+        match result
+        | None =>
+          // goodbye
+          Debug.out("Recv a goodbye")
+          conn.close()
+        | (let next_expect: USize, let auth_tag: String) =>
+            conn.expect(next_expect)?
+            _state = _BoxStreamExpectBody(auth_tag)
+        end
+
+      | let info: _BoxStreamExpectBody =>
+        let plaintext = _boxstream.decrypt(info.auth_tag, msg)?
+        Debug.out("Recv plaintext " + plaintext)
+      end
+    else
+      conn.close()
+      Debug.err("Error: _BoxStreamNotify bad recv")
+    end
+
+    true
+
+  fun ref expect(conn: TCPConnection ref, qty: USize): USize =>
+    // TODO(borja): Figure out if we must do something here
+    qty
+
+  fun ref closed(conn: TCPConnection ref) =>
+    // TODO(borja): Should we send the goodbye here?
+    None
 
 class iso _PeerNotify is TCPConnectionNotify
   let _shs: HandshakeServer
@@ -35,8 +95,10 @@ class iso _PeerNotify is TCPConnectionNotify
     try
       (let expect, let resp) = _shs.step(consume msg)?
       if expect == 0 then
-        // TODO(borja): Swap notify
         Debug.out("Handshake complete")
+        let boxstream = _shs.boxstream()?
+        conn.expect(boxstream.header_size())?
+        conn.set_notify(_BoxStreamNotify(consume boxstream))
       end
 
       conn.write(resp)
