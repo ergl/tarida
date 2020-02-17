@@ -7,3 +7,18 @@ primitive Identity
 
   fun encode(pub: Ed25519Public): String iso^ =>
     Base64.encode(pub where linelen = 64, linesep = "")
+
+  fun encode_invite(domain: String, port: String, pub: Ed25519Public, seed: String): String iso^ =>
+    let pk = encode(pub)
+    let invite_key = Base64.encode(seed where linelen = 64, linesep = "")
+    recover
+      // domain:port:@pk.ed25519~invite
+      let s = String.create(domain.size() + 1 + port.size() + 2 + pk.size() + 9 + invite_key.size())
+      s.>append(domain)
+       .>push(':')
+       .>append(port)
+       .>append(":@")
+       .>append(consume pk)
+       .>append(".ed25519~")
+       .>append(consume invite_key)
+    end

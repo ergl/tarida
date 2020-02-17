@@ -26,5 +26,13 @@ actor Main
         )
       end
 
+      if config.is_pub then
+        // TODO(borja): This should be stored somewhere
+        (let inv_pub, let inv_priv) = Identity.generate()?
+        let seed = Sodium.ed25519_pair_sk_to_seed(inv_priv)?
+        let invite = Identity.encode_invite(config.pub_domain, config.pub_port, public, seed)
+        env.out.print(consume invite)
+      end
+
       PeerServer(NetAuth(auth), public, secret, peer_port)
     end

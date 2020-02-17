@@ -3,6 +3,8 @@ use "cli"
 class val TaridaConfig
   var local_broadcast: Bool = true
   var is_pub: Bool = false
+  var pub_domain: String = ""
+  var pub_port: String = ""
   var config_path: String = ""
   var peer_port: String = "9999"
 
@@ -35,6 +37,17 @@ primitive ArgConfig
           "Peer TCP port"
           where short' = 't', default' = "9999"
         )
+
+        // TODO(borja): Should be required only if pub is true
+        OptionSpec.string(
+          "pub_domain",
+          "Public pub domain"
+        )
+
+        OptionSpec.string(
+          "pub_port",
+          "Public pub port"
+        )
       ]
     )?.>add_help()?
 
@@ -62,6 +75,10 @@ primitive ArgConfig
 
     config.local_broadcast = cmd.option("broadcast").bool()
     config.is_pub = cmd.option("pub").bool()
+    if config.is_pub then
+      config.pub_domain = cmd.option("pub_domain").string()
+      config.pub_port = cmd.option("pub_port").string()
+    end
     config.config_path = cmd.option("id_path").string()
     config.peer_port = cmd.option("peer_port").string()
     config

@@ -11,6 +11,7 @@ use @crypto_sign_keypair[I32](pk: Pointer[U8] tag, sk: Pointer[U8] tag)
 use @crypto_sign_seed_keypair[I32](pk: Pointer[U8] tag, sk: Pointer[U8] tag, seed: Pointer[U8] tag)
 // pk is filled by callee
 use @crypto_sign_ed25519_sk_to_pk[I32](pk: Pointer[U8] tag, sk: Pointer[U8] tag)
+use @crypto_sign_ed25519_sk_to_seed[I32](seed: Pointer[U8] tag, sk: Pointer[U8] tag)
 
 // Ephemeral Curve25519
 use @crypto_box_publickeybytes[USize]()
@@ -151,6 +152,12 @@ primitive Sodium
     let ret = @crypto_sign_ed25519_sk_to_pk(pk.cpointer(), sk.cpointer())
     if \unlikely\ ret != 0 then error end
     Ed25519Public(consume pk)
+
+  fun ed25519_pair_sk_to_seed(sk: Ed25519Secret): String? =>
+    let seed = _make_buffer(@crypto_sign_seedbytes())
+    let ret = @crypto_sign_ed25519_sk_to_seed(seed.cpointer(), sk.cpointer())
+    if \unlikely\ ret != 0 then error end
+    String.from_array(consume seed)
 
   fun curve25519_pair(): (Curve25519Public, Curve25519Secret)? =>
     let pk = _make_buffer(@crypto_box_publickeybytes())
