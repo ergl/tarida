@@ -260,6 +260,9 @@ primitive _Handshake
     if plain_text.size() != 96 then error end // Spec
 
     let sign_detached = plain_text.trim(0, 64)
+    // TODO(borja): Test if client is redeeming invite
+    // If the client is redeeming an invite, client_id_pk should match
+    // the public key we generated for the invite
     let client_id_pk = plain_text.trim(64) // until the end
 
     let hashed_ss = SHA256(short_term_ss.string())
