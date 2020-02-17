@@ -36,4 +36,4 @@ A _tarida_ was a small boat used to transport horses in Catalonia during the 14t
 
 ## License
 
-Tarida is licensed under the MIT license. For more information, check out the [license](./license).
+Tarida is licensed under the MIT license. For more information, check out the [license](./LICENSE).
