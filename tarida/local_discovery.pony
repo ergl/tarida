@@ -6,6 +6,7 @@
 use "net"
 use "time"
 use "regex"
+use "collections"
 
 use "debug"
 
@@ -109,6 +110,8 @@ actor Discovery
   let _timer_wheel: Timers = Timers
   var _timer_handle: (Timer tag | None) = None
 
+  let _found_peers: Set[String] = Set[String]
+
   new create(auth: AmbientAuth, pk: String, iface: String, port: String, peer_port: String) =>
     _auth = NetAuth(auth)
     _self_port = port
@@ -164,10 +167,11 @@ actor Discovery
 
       let peer_ip = matches(1)?
       let peer_port = matches(2)?
-      let peer_pub = matches(3)?
+      let peer_pub_iso = matches(3)?
+      let peer_pub = consume val peer_pub_iso
 
       // Ignore self
-      if peer_pub == _self_pk then
+      if (peer_pub == _self_pk) or _found_peers.contains(peer_pub) then
         return
       end
 
@@ -176,5 +180,7 @@ actor Discovery
                 + ":"
                 + (consume peer_port)
                 + "~"
-                + (consume peer_pub))
+                + peer_pub)
+
+      _found_peers.set(peer_pub)
     end
