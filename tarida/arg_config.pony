@@ -20,12 +20,6 @@ primitive ArgConfig
           where short' = 'b', default' = false
         )
 
-        OptionSpec.bool(
-          "pub",
-          "Tells tarida to act as a pub (generate invites)"
-          where short' = 'p', default' = false
-        )
-
         OptionSpec.string(
           "id_path",
           "Tells tarida where to find the configuration file"
@@ -38,15 +32,23 @@ primitive ArgConfig
           where short' = 't', default' = "9999"
         )
 
-        // TODO(borja): Should be required only if pub is true
-        OptionSpec.string(
+        OptionSpec.bool(
+          "pub",
+          "Turn this server into a pub"
+          where short' = 'p', default' = false
+        )
+      ],
+      [
+        ArgSpec.string(
           "pub_domain",
-          "Public pub domain"
+          "Public pub domain",
+          ""
         )
 
-        OptionSpec.string(
+        ArgSpec.string(
           "pub_port",
-          "Public pub port"
+          "Public pub port",
+          ""
         )
       ]
     )?.>add_help()?
@@ -76,9 +78,18 @@ primitive ArgConfig
     config.local_broadcast = cmd.option("broadcast").bool()
     config.is_pub = cmd.option("pub").bool()
     if config.is_pub then
-      config.pub_domain = cmd.option("pub_domain").string()
-      config.pub_port = cmd.option("pub_port").string()
+      let pub_domain = cmd.option("pub_domain").string()
+      let pub_port = cmd.option("pub_port").string()
+      if (pub_domain.size() == 0) or (pub_port.size() == 0) then
+        env.err.print("Error: server is pub, but no domain or port was given")
+        env.exitcode(1)
+        error
+      end
+
+      config.pub_domain = pub_domain
+      config.pub_port = pub_port
     end
+
     config.config_path = cmd.option("id_path").string()
     config.peer_port = cmd.option("peer_port").string()
     config
