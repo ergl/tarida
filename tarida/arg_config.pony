@@ -78,8 +78,8 @@ primitive ArgConfig
     config.local_broadcast = cmd.option("broadcast").bool()
     config.is_pub = cmd.option("pub").bool()
     if config.is_pub then
-      let pub_domain = cmd.option("pub_domain").string()
-      let pub_port = cmd.option("pub_port").string()
+      let pub_domain = cmd.arg("pub_domain").string()
+      let pub_port = cmd.arg("pub_port").string()
       if (pub_domain.size() == 0) or (pub_port.size() == 0) then
         env.err.print("Error: server is pub, but no domain or port was given")
         env.exitcode(1)
