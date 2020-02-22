@@ -106,10 +106,11 @@ class iso _PeerNotify is TCPConnectionNotify
         let boxstream = _shs.boxstream()?
         conn.expect(boxstream.header_size())?
         conn.set_notify(_BoxStreamNotify(consume boxstream))
+      else
+        conn.expect(expect)?
       end
 
-      conn.write(resp)
-      conn.expect(expect)?
+      conn.write_final(resp)
     else
       Debug.err("Error: _PeerNotify bad SHS")
       conn.close()
