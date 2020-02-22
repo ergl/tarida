@@ -256,7 +256,7 @@ primitive Sodium
     if \unlikely\ ret != 0 then error end
     String.from_array(consume enc)
 
-  fun box_easy_open(enc: ByteSeq, key: ByteSeq, nonce: ByteSeq): String? =>
+  fun box_easy_open(enc: ByteSeq, key: ByteSeq, nonce: ByteSeq): String iso^? =>
     if key.size() != @crypto_secretbox_keybytes() then
       error
     end
@@ -276,4 +276,4 @@ primitive Sodium
                                           nonce.cpointer(),
                                           key.cpointer())
     if \unlikely\ ret != 0 then error end
-    String.from_array(consume msg)
+    String.from_iso_array(consume msg)

@@ -256,7 +256,7 @@ primitive _Handshake
     end
     let key = SHA256(consume key_raw)
 
-    let plain_text = Sodium.box_easy_open(enc, consume key, consume nonce)?
+    let plain_text = recover val Sodium.box_easy_open(enc, consume key, consume nonce)? end
     if plain_text.size() != 96 then error end // Spec
 
     let sign_detached = plain_text.trim(0, 64)
@@ -363,7 +363,7 @@ primitive _Handshake
     end
     let key = SHA256(consume raw_key)
 
-    let server_sign = Sodium.box_easy_open(enc, consume key, consume nonce)?
+    let server_sign = recover val Sodium.box_easy_open(enc, consume key, consume nonce)? end
 
     let hashed_ss = SHA256(short_term_ss.string())
     let msg_size = net_id.size() + client_sign.size() + client_id_pk.size() + hashed_ss.size()

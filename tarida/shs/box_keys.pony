@@ -56,7 +56,7 @@ class iso BoxStream
 
   fun ref decrypt_header(msg: String): ((USize, String) | None)? =>
     let header_nonce = _dec_nonce.as_nonce(); _dec_nonce.next()
-    let header = Sodium.box_easy_open(msg, _dec_key.string(), header_nonce)?
+    let header = recover val Sodium.box_easy_open(msg, _dec_key.string(), header_nonce)? end
     if header.size() != 18 then error end // Spec
     // If this msg is a goodbye, the caller should close the connection
     if _is_goodbye(header) then return None end
@@ -73,7 +73,7 @@ class iso BoxStream
     end
     true
 
-  fun ref decrypt(body_auth: String, msg: String): String? =>
+  fun ref decrypt(body_auth: String, msg: String): String iso^? =>
     let body_nonce = _dec_nonce.as_nonce(); _dec_nonce.next()
 
     let msg_size = msg.size() + body_auth.size() // Auth should be 16 bytes
