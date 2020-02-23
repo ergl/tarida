@@ -10,12 +10,14 @@ Not much planned right now. My first intention was to experiment with the SSB pr
 
 - Local network peer advertisement and discovery.
 - Secret Handshake protocol.
-- Box stream protocol (although key derivation is complete).
+- Box stream protocol (receiving)
+- RPC protocol (receiving)
 
 ### What's next?
 
+- Box stream (sending, chunking)
+- RPC protocol (sending, chunking)
 - Pub invites
-- RPC protocol.
 - Feeds (although probably using the [GabbyGrove](https://github.com/ssbc/ssb-spec-drafts/blob/b9187d5e11e5d630e4485af8e44f08f2afab6c08/drafts/draft-ssb-core-gabbygrove/00/draft-ssb-core-gabbygrove-00.md) format).
 - Figure out how to do static binaries for linux, at least.
 - Identity persistence between runs (right now, tarida generates a new identity pair every time it's run).
