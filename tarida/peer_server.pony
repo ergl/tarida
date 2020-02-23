@@ -2,6 +2,7 @@ use "net"
 use "shs"
 use "sodium"
 use "debug"
+use "rpc"
 
 // SHS/RPC Ideas:
 // On starting, our TCP server uses a Handshake notify, that performs the SHS mechanism.
@@ -10,56 +11,13 @@ use "debug"
 // The next layer is the RPC mechanism, which also handles framing.
 // The RPC layer can either be the final layer, or delegate RPC header parsing to another notifier.
 
-type RPCMessage is (U8, I32, ByteSeq)
-
-class MessageSlicer
-  var _buffer: Array[U8] iso
-
-  new create(size': USize = 0) =>
-    _buffer = recover Array[U8].create(size') end
-
-  fun ref append(bytes: ByteSeq) =>
-    _buffer.append(consume bytes)
-
-  fun ref decode_msg(): (RPCMessage | None)? =>
-    let header_size: USize = 9
-    let data_size = _buffer.size()
-
-    if data_size < header_size then
-      return None
-    end
-
-    let body_size = _buffer_read_u32_be(1)?.usize()
-    let total_size = header_size + body_size
-    if data_size < total_size then
-      return None
-    end
-
-    let flags = _buffer(0)?
-    let req_number = _buffer_read_u32_be(5)?.i32()
-
-    _buffer.trim_in_place(header_size)
-    (let message_body, _buffer) = (consume _buffer).chop(body_size)
-
-    (flags, req_number, consume message_body)
-
-  fun ref _buffer_read_u32_be(offset: USize): U32? =>
-    ifdef bigendian then
-      _buffer.read_u32(offset)?
-    else
-      _buffer.read_u32(offset)?.bswap()
-    end
-
-  fun ref size(): USize =>
-    _buffer.size()
-
 actor RPCConnection
   let _socket: TCPConnection
-  embed _buffer: MessageSlicer
+  embed _buffer: RPCDecoder
 
   new create(raw_socket: TCPConnection) =>
     _socket = raw_socket
-    _buffer = MessageSlicer
+    _buffer = RPCDecoder
 
   be write(data: ByteSeq) =>
     _socket.write(consume data)
@@ -67,36 +25,43 @@ actor RPCConnection
   be chunk(data: (String iso | Array[U8] iso)) =>
     Debug.out("Have left in buffer: " + _buffer.size().string())
     _buffer.append(consume data)
-    _try_deliver_chunks()
+    _try_process_chunks()
 
-  fun ref _try_get_all_msgs(): Array[RPCMessage] iso^ =>
-    let msgs = recover Array[RPCMessage] end
+  fun ref _try_process_chunks() =>
     while true do
       try
         match _buffer.decode_msg()?
-        | None =>
-          Debug.out("RPCConnection can't find entire msg")
+        | None => break
+        | Goodbye =>
+          Debug.out("RPCConnection: goodbye")
+          _socket.dispose()
           break
-        | let msg: RPCMessage => msgs.push(msg)
+        | let msg: RPCMessage => _process_msg(msg)
         end
       else
         Debug.err("RPCConnection: _decode_packet bad packet")
         break
       end
     end
-    consume msgs
 
-  fun ref _try_deliver_chunks() =>
-    let ready_msgs = _try_get_all_msgs()
-    for msg in (consume ready_msgs).values() do
-      (_, let packet_number, let body) = msg
-      let body_msg = match body
-      | let a: Array[U8] val => String.from_array(a)
-      | let s: String => s
-      end
-
-      Debug.out("Got RPC message number " + packet_number.string() + ": " + body_msg)
+  fun _process_msg(msg: RPCMessage) =>
+    let stream = msg.is_stream()
+    let is_error = msg.is_end_error()
+    let seq = msg.packet_number()
+    let kind = match msg
+    | let _: RPCBinaryMessage => "binary"
+    | let _: RPCStringMessage => "string"
+    | let _: RPCJsonMessage => "json"
     end
+
+    let content = msg.string()
+    Debug.out(
+      "<type=" + kind +
+      ", seq=" + seq.string() +
+      ", stream=" + stream.string() +
+      ", error/end=" + is_error.string() +
+      ". content=" + content
+      )
 
 primitive _BoxStreamExpectHeader
 class val _BoxStreamExpectBody
