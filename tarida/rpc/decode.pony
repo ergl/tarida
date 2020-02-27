@@ -1,3 +1,6 @@
+use "package:../ssbjson"
+use "itertools"
+
 primitive _BinaryMessage
 primitive _StringMessage
 primitive _JSONMessage
@@ -22,10 +25,15 @@ class RPCDecoder
     """
     _buffer.append(consume bytes)
 
-  fun ref decode_msg(): (RPCMessage | Goodbye | None)? =>
+  fun ref decode_msg(): (RPCMessage iso^ | Goodbye | None)? =>
     """
     Try to decode a message. If there's not enough data to get a complete message,
     `decode_msg` will return None, and the underlying buffer will be left intact.
+
+    If the message is of type json, the decoder will try to decode it along the
+    specifications on https://ssbc.github.io/scuttlebutt-protocol-guide/, that is,
+    a request has a procedure name, a procedure type, and the procedure args. Some
+    messages may have incomplete keys.
 
     If the decoder finds bad data, it will error out, and the underlying buffer will
     be left intact.
@@ -68,7 +76,11 @@ class RPCDecoder
       | _StringMessage =>
           RPCStringMessage(String.from_iso_array(consume message_body), is_stream, is_error, req_number)
       | _JSONMessage =>
-          RPCJsonMessage(String.from_iso_array(consume message_body), is_stream, is_error, req_number)
+          let inner_contents = _parse_rpc_json(
+            String.from_iso_array(consume message_body)
+          )?
+
+          RPCJsonMessage(consume inner_contents, is_stream, is_error, req_number)
       end
     end
 
@@ -78,6 +90,56 @@ class RPCDecoder
     else
       _buffer.read_u32(offset)?.bswap()
     end
+
+  fun _parse_rpc_json(str: String iso)
+    : (RPCjsonMethod iso^ | RPCrawJson iso^)?
+  =>
+    let req_str = consume val str
+    recover
+      let msg = JsonDoc.>parse(req_str)?
+      let msg_data = msg.get_data()
+      match msg_data
+      | let o: JsonObject =>
+        let obj_data = o.get_data()
+        if obj_data.contains("name") then
+          let name_contents = obj_data("name")?
+          match name_contents
+          | let arr: JsonArray =>
+            let name_arr = arr.get_data()
+            // We're pretty sure this is a method
+            _parse_rpc_method(name_arr, o)?
+          else msg end
+        else
+          msg
+        end
+      else msg end
+    end
+
+  fun tag _parse_rpc_method(
+    name_arr: Array[JsonType],
+    rest: JsonObject)
+    : RPCjsonMethod?
+  =>
+    let obj_data = rest.get_data()
+    let method_namespace = name_arr(0)? as String
+    let flat_name = Iter[JsonType](name_arr.values())
+      .fold_partial[String]("", {(acc, elt): String? =>
+        if acc == "" then
+          acc + (elt as String)
+        else
+          acc + "." + (elt as String)
+        end
+      })?
+
+    // FIXME(borja): Manyverse sends this message without `type` key
+    // Ideally, we'd read ssb/manifest.json to see what the type is,
+    // if the other side is not sending that key.
+    let msg_type = match flat_name
+    | "tunnel.isRoom" => "async"
+    else obj_data("type")? as String end
+
+    let args = obj_data("args")? as JsonArray
+    RPCjsonMethod(method_namespace, flat_name, msg_type, args)
 
   fun ref size(): USize =>
     """
