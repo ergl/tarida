@@ -24,6 +24,9 @@ class JsonArray
     """
     data = data'
 
+  fun get_data(): this->Array[JsonType]! =>
+    data
+
   fun string(indent: String = "", pretty_print: Bool = false): String =>
     """
     Generate string representation of this array.
@@ -94,6 +97,9 @@ class JsonObject
     Create a Json object from a map.
     """
     data = data'
+
+  fun get_data(): this->Map[String, JsonType]! =>
+    data
 
   fun string(
     indent: String = "",

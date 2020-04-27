@@ -27,6 +27,9 @@ class JsonDoc
     """
     data = None
 
+  fun get_data(): this->JsonType! =>
+    data
+
   fun string(
     indent: String = "",
     pretty_print: Bool = false,
