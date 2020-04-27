@@ -110,6 +110,7 @@ actor Discovery
   let _timer_wheel: Timers = Timers
   var _timer_handle: (Timer tag | None) = None
 
+  let _ann_regex: (Regex | None)
   let _found_peers: Set[String] = Set[String]
 
   new create(auth: AmbientAuth, pk: String, iface: String, port: String, peer_port: String) =>
@@ -117,6 +118,7 @@ actor Discovery
     _self_port = port
     _peer_port = peer_port
     _self_pk = pk
+    _ann_regex = try Regex("^net:(.+):(\\d+)~shs:(.+)$")? else None end
 
     _recv_socket = UDPSocket(_auth, _BroadcastReceiver(_auth, this), "", _self_port)
     IPConfig(
@@ -160,10 +162,8 @@ actor Discovery
 
   be _peer(maybe_ann: String) =>
     try
-      // FIXME(borja): Don't allocate the regex on every peer
-      let ann_regex = Regex("^net:(.+):(\\d+)~shs:(.+)$")?
       let ann = maybe_ann.split(";")(0)?
-      let matches = ann_regex(ann)?
+      let matches = (_ann_regex as Regex)(ann)?
 
       let peer_ip = matches(1)?
       let peer_port = matches(2)?
