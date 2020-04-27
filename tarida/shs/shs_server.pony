@@ -69,6 +69,14 @@ class iso HandshakeServer
     | _ServerDone => error // Shouldn't reuse the server
     end
 
+  fun remote_pk(): Ed25519Public? =>
+    """
+    Return the public key of the client.
+
+    Errors if the server is not aware of the key yet.
+    """
+    _other_id_pk as Ed25519Public
+
   fun boxstream(): BoxStream^? =>
     if _state isnt _ServerDone then error end
 

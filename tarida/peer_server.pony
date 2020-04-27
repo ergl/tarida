@@ -3,6 +3,7 @@ use "shs"
 use "sodium"
 use "debug"
 use "rpc"
+use "promises"
 
 // SHS/RPC Ideas:
 // On starting, our TCP server uses a Handshake notify, that performs the SHS mechanism.
@@ -13,16 +14,26 @@ use "rpc"
 
 actor RPCConnection
   let _socket: TCPConnection
+  let _remote_pk: Ed25519Public
   embed _buffer: RPCDecoder
 
-  new create(raw_socket: TCPConnection) =>
+  new create(raw_socket: TCPConnection, other_pk: Ed25519Public) =>
     _socket = raw_socket
+    _remote_pk = other_pk
     _buffer = RPCDecoder
 
   be write(data: ByteSeq) =>
     _socket.write(consume data)
 
-  be chunk(data: (String iso | Array[U8] iso)) =>
+  fun tag remote_pk(): Promise[Ed25519Public] =>
+    let p = Promise[Ed25519Public]
+    _fetch_remote_pk(p)
+    p
+
+  be _fetch_remote_pk(promise: Promise[Ed25519Public]) =>
+    promise(_remote_pk)?
+
+  be _chunk(data: (String iso | Array[U8] iso)) =>
     Debug.out("Have left in buffer: " + _buffer.size().string())
     _buffer.append(consume data)
     _try_process_chunks()
@@ -60,7 +71,7 @@ actor RPCConnection
       ", seq=" + seq.string() +
       ", stream=" + stream.string() +
       ", error/end=" + is_error.string() +
-      ". content=" + content
+      ", content=" + content
       )
 
 primitive _BoxStreamExpectHeader
@@ -79,12 +90,16 @@ class _BoxStreamNotify is TCPConnectionNotify
   let _boxstream: BoxStream
   var _state: _BoxStreamNotifyState
 
-  new create(socket: TCPConnection, boxtream: BoxStream iso) =>
+  new create(
+    socket: TCPConnection,
+    remote_pk: Ed25519Public,
+    boxtream: BoxStream iso)
+  =>
     _boxstream = consume boxtream
     _state = _BoxStreamExpectHeader
 
     _socket = socket
-    _notify = RPCConnection(_socket)
+    _notify = RPCConnection(_socket, remote_pk)
 
   fun ref connect_failed(conn: TCPConnection ref) => None
 
@@ -123,7 +138,7 @@ class _BoxStreamNotify is TCPConnectionNotify
       | let info: _BoxStreamExpectBody =>
         Debug.out("_BoxStreamNotify recv body of size " + msg.size().string())
 
-        _notify.chunk(_boxstream.decrypt(info.auth_tag, msg)?.iso_array())
+        _notify._chunk(_boxstream.decrypt(info.auth_tag, msg)?.iso_array())
         conn.expect(_boxstream.header_size())?
         _state = _BoxStreamExpectHeader
       end
@@ -159,10 +174,17 @@ class iso _PeerNotify is TCPConnectionNotify
       (let expect, let resp) = _shs.step(consume msg)?
       if expect == 0 then
         Debug.out("Handshake complete")
+        let remote_pk = _shs.remote_pk()?
         let boxstream = _shs.boxstream()?
         conn.expect(boxstream.header_size())?
         let conn_tag = recover tag conn end
-        conn.set_notify(recover _BoxStreamNotify(conn_tag, consume boxstream) end)
+        conn.set_notify(recover
+          _BoxStreamNotify(
+            conn_tag,
+            remote_pk,
+            consume boxstream
+          )
+        end)
       else
         conn.expect(expect)?
       end
