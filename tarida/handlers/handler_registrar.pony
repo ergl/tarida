@@ -3,4 +3,8 @@ use "package:./blobs"
 
 primitive HandlerRegistrar
   fun apply(namespace: String): (Handler | None) =>
-    None
+    match namespace
+    | "gossip" => GossipHandler
+    | "blobs" => BlobsHandler
+    else None
+    end
