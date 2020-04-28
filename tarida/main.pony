@@ -11,20 +11,11 @@ actor Main
 
       let config = ArgConfig(env)?
       let peer_port = config.peer_port
-      if config.local_broadcast then
-        // TODO(borja): Find a way to get the IP,
-        // we need it for the advert
-        let iface = "en0"
-        let broadcast_port = "8008"
-        // TODO(borja): Consider using bureaucracy.Registrar for services
-        Discovery(
-          auth,
-          Identity.encode(public),
-          iface,
-          broadcast_port,
-          peer_port
-        )
-      end
+      match config.local_broadcast_ip
+      | let addr: String =>
+          let broadcast_port = "8008"
+          Discovery(auth, Identity.encode(public), addr, broadcast_port, peer_port)
+      else None end
 
       if config.is_pub then
         // TODO(borja): This should be stored somewhere

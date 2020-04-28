@@ -97,14 +97,14 @@ actor Discovery
   let _auth: NetAuth
   let _self_pk: String
 
-  var _self_ip: (String | None) = None
+  let _self_ip: String
   let _self_port: String
   let _peer_port: String
   var _broadcast_addr: (NetAddress | None) = None
-  var _announcement: (String | None) = None
+  let _announcement: String
 
   let _recv_socket: UDPSocket
-  var _snd_socket: (UDPSocket | None) = None
+  let _snd_socket: UDPSocket
 
   let _broadcast_interval: U64 = 2_000_000_000
   let _timer_wheel: Timers = Timers
@@ -113,37 +113,26 @@ actor Discovery
   let _ann_regex: (Regex | None)
   let _found_peers: Set[String] = Set[String]
 
-  new create(auth: AmbientAuth, pk: String, iface: String, port: String, peer_port: String) =>
+  new create(auth: AmbientAuth, pk: String, host: String, port: String, peer_port: String) =>
     _auth = NetAuth(auth)
+    _ann_regex = try Regex("^net:(.+):(\\d+)~shs:(.+)$")? else None end
+    _self_pk = pk
+    _self_ip = host
     _self_port = port
     _peer_port = peer_port
-    _self_pk = pk
-    _ann_regex = try Regex("^net:(.+):(\\d+)~shs:(.+)$")? else None end
 
+    Debug.out("Discovery will advertise on " + _self_ip + ":" + _self_port)
+    _snd_socket = UDPSocket(_auth, _BroadcastSender(this), _self_ip, _self_port)
     _recv_socket = UDPSocket(_auth, _BroadcastReceiver(_auth, this), "", _self_port)
-    IPConfig(
-      auth,
-      iface,
-      recover val this~_iface_ready() end,
-      recover val this~_iface_error() end
-    )
-
-  be _iface_ready(self_ip: String) =>
-    Debug.out("Discovery will advertise on " + self_ip + ":" + _self_port)
-    _self_ip = self_ip
-    _snd_socket = UDPSocket(_auth, _BroadcastSender(this), self_ip, _self_port)
     _announcement = recover val
-      String.create(4 + self_ip.size() + 1 + _peer_port.size() + 5 + _self_pk.size())
+      String.create(4 + _self_ip.size() + 1 + _peer_port.size() + 5 + _self_pk.size())
         .>append("net:")
-        .>append(self_ip)
+        .>append(_self_ip)
         .>push(':')
         .>append(_peer_port)
         .>append("~shs:")
         .>append(_self_pk)
     end
-
-  be _iface_error() =>
-    Debug.err("Error: Discover get_ip_error, won't advertise")
 
   be _snd_sock_ready() =>
     try
@@ -157,7 +146,7 @@ actor Discovery
 
   be _broadcast() =>
     try
-      (_snd_socket as UDPSocket).write((_announcement as String), _broadcast_addr as NetAddress)
+      _snd_socket.write(_announcement, _broadcast_addr as NetAddress)
     end
 
   be _peer(maybe_ann: String) =>

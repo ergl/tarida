@@ -1,12 +1,12 @@
 use "cli"
 
 class val TaridaConfig
-  var local_broadcast: Bool = true
   var is_pub: Bool = false
   var pub_domain: String = ""
   var pub_port: String = ""
   var config_path: String = ""
   var peer_port: String = "9999"
+  var local_broadcast_ip: (String | None) = None
 
 primitive ArgConfig
   fun _spec(): CommandSpec? =>
@@ -14,10 +14,10 @@ primitive ArgConfig
       "tarida",
       "WIP SSB server",
       [
-        OptionSpec.bool(
+        OptionSpec.string(
           "broadcast",
-          "Tells tarida to broadcast to peers locally"
-          where short' = 'b', default' = false
+          "Tells tarida the IP used to broadcast to peers locally"
+          where short' = 'b', default' = ""
         )
 
         OptionSpec.string(
@@ -75,7 +75,8 @@ primitive ArgConfig
     let cmd = _parse(env)?
     let config = TaridaConfig
 
-    config.local_broadcast = cmd.option("broadcast").bool()
+    let broadcast_ip = cmd.option("broadcast").string()
+    config.local_broadcast_ip = if broadcast_ip == "" then None else broadcast_ip end
     config.is_pub = cmd.option("pub").bool()
     if config.is_pub then
       let pub_domain = cmd.arg("pub_domain").string()
