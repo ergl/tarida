@@ -69,7 +69,7 @@ class RPCMsg
   new error_close_from(from: RPCMsgHeader, payload: RPCData iso) =>
     _data = consume ref payload
     _header = RPCMsgHeader(where packet_number' = from.packet_number.neg(),
-                                 is_stream' = from.is_stream,
+                                 is_stream' = false,
                                  type_info' = from.type_info,
                                  is_end_error' = true)
 
@@ -85,7 +85,7 @@ class RPCMsg
 
     _data = consume ref error_payload
     _header = RPCMsgHeader(where packet_number' = from.packet_number.neg(),
-                                 is_stream' = from.is_stream,
+                                 is_stream' = false,
                                  type_info' = JSONMessage,
                                  is_end_error' = true)
 

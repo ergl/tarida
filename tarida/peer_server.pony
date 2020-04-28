@@ -27,16 +27,31 @@ actor RPCConnection
     _active_handlers = Map[U32, Handler]
     _buffer = RPCDecoder
 
-  // be write(data: ByteSeq) =>
-  //   _socket.write(consume data)
-
   be write(msg: RPCMsg iso) =>
-    // TODO(borja): Will writev work for this?
-    // Have to perform chunking here, or can we allow decode to do the chunking for us?
-    // Encode the msg, send it through
-    // _socet.write()
-    Debug.out("RPCConnection: should send" + msg.string())
-    None
+    var bytes = RPCEncoder(consume msg)
+
+    // If we perform chunking at a lower layer,
+    // we'll end up coping a lot of things, since they get a `val` view
+    let chunk_size: USize = 4096
+    let chunks = (bytes.size().f64() / chunk_size.f64()).ceil().usize()
+    let io_vecs = recover Array[Array[U8] val].create(chunks) end
+    while true do
+      if chunk_size > bytes.size() then
+        // Push remainder, and exit
+        // (destructive read to get over "bytes is consumed at the end of loop")
+        // Take into leftover all what's left of bytes, and assign an empty byteseq
+        let leftover = bytes = recover [] end
+        // _socket.write(consume leftover)
+        io_vecs.push(consume leftover)
+        break
+      else
+        (bytes, let current_chunk) = (consume bytes).chop(chunk_size)
+        // _socket.write(consume current_chunk)
+        io_vecs.push(consume current_chunk)
+      end
+    end
+
+    _socket.writev(consume io_vecs)
 
   fun tag remote_pk(): Promise[Ed25519Public] =>
     let p = Promise[Ed25519Public]
@@ -181,14 +196,28 @@ class _BoxStreamNotify is TCPConnectionNotify
   fun ref connect_failed(conn: TCPConnection ref) => None
 
   fun ref sent(conn: TCPConnection ref, data: ByteSeq): ByteSeq =>
-    // TODO(borja): Encrypt data here. Must return the transformed data
-    // Remember the 4096 byte limit
-    data
-
-  fun ref sentv(conn: TCPConnection ref, data: ByteSeqIter): ByteSeqIter =>
     // TODO(borja): Encrypt data here. Will this be used?
     // Remember the 4096 byte limit per byteseq
-    data
+    Debug.err("sending single byte seq will be dropped")
+    ""
+
+  fun ref sentv(conn: TCPConnection ref, data: ByteSeqIter): ByteSeqIter =>
+    // The upper layer already perfomed chunking, so we're safe
+    // TODO(borja): Encrypt data here. Will this be used?
+    // Remember the 4096 byte limit per byteseq
+    // Since we get a val, we can't modify the data in place
+    // But, we're only allocating a few chunks, so hopefully it's not too bad
+    let io_vecs = recover Array[ByteSeq] end
+    for chunk in data.values() do
+      try
+        io_vecs.push(_boxstream.encrypt(chunk)?)
+      else
+        Debug.err("_BoxStreamNotify: error while encrypting chunk")
+      end
+    end
+
+    io_vecs
+
 
   fun ref received(
     conn: TCPConnection ref,

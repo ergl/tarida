@@ -35,7 +35,7 @@ class iso BoxStream
 
   fun header_size(): USize => 34
 
-  fun ref encrypt(msg: String): String? =>
+  fun ref encrypt(msg: ByteSeq): ByteSeq? =>
     let msg_size = msg.size()
     // TODO(borja): Perform chunking at a higher level
     if msg_size > 4096 then error end

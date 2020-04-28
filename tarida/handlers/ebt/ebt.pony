@@ -26,7 +26,6 @@ actor EBTHandler is Handler
     else Debug("ebt: don't know how to handle " + method.name) end
 
   fun ref _handle_replicate(conn: RPCConnection, header: RPCMsgHeader, args: JsonArray) =>
-    Debug.out("ebt.replicate: " + args.string())
     conn.write(recover
       RPCMsg.json_error_from(header, "tarida doesn't support ebt replication yet")
     end)
