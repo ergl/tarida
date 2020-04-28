@@ -1,9 +1,6 @@
 use "package:../ssbjson"
 use "itertools"
 
-primitive _BinaryMessage
-primitive _StringMessage
-primitive _JSONMessage
 primitive Goodbye
 
 class RPCDecoder
@@ -25,7 +22,7 @@ class RPCDecoder
     """
     _buffer.append(consume bytes)
 
-  fun ref decode_msg(): (RPCMessage iso^ | Goodbye | None)? =>
+  fun ref decode_msg(): (RPCMsg iso^ | Goodbye | None)? =>
     """
     Try to decode a message. If there's not enough data to get a complete message,
     `decode_msg` will return None, and the underlying buffer will be left intact.
@@ -61,26 +58,28 @@ class RPCDecoder
     let is_stream = (flags and _stream_mask) == _stream_mask
     let is_error = (flags and _end_mask) == _end_mask
     let kind = match (flags and _type_mask)
-    | 0x0 => _BinaryMessage
-    | 0x1 => _StringMessage
-    | 0x2 => _JSONMessage
+    | 0x0 => BinaryMessage
+    | 0x1 => StringMessage
+    | 0x2 => JSONMessage
     else error end
 
     _buffer.trim_in_place(header_size)
+
+    let message_header = RPCMsgHeader(req_number, is_stream, is_error, kind)
     (let message_body, _buffer) = (consume _buffer).chop(body_size)
 
     recover
       match kind
-      | _BinaryMessage =>
-          RPCBinaryMessage(consume message_body, is_stream, is_error, req_number)
-      | _StringMessage =>
-          RPCStringMessage(String.from_iso_array(consume message_body), is_stream, is_error, req_number)
-      | _JSONMessage =>
+      | BinaryMessage =>
+          RPCMsg(message_header, consume message_body)
+      | StringMessage =>
+          RPCMsg(message_header, String.from_iso_array(consume message_body))
+      | JSONMessage =>
           let inner_contents = _parse_rpc_json(
             String.from_iso_array(consume message_body)
           )?
 
-          RPCJsonMessage(consume inner_contents, is_stream, is_error, req_number)
+          RPCMsg(message_header, consume inner_contents)
       end
     end
 
@@ -92,7 +91,7 @@ class RPCDecoder
     end
 
   fun _parse_rpc_json(str: String iso)
-    : (RPCjsonMethod iso^ | RPCrawJson iso^)?
+    : (RPCjsonMethod iso^ | RPCrawJSON iso^)?
   =>
     let req_str = consume val str
     recover
@@ -108,11 +107,11 @@ class RPCDecoder
             let name_arr = arr.get_data()
             // We're pretty sure this is a method
             _parse_rpc_method(name_arr, o)?
-          else msg end
+          else RPCrawJSON(msg_data) end
         else
-          msg
+          RPCrawJSON(msg_data)
         end
-      else msg end
+      else RPCrawJSON(msg_data) end
     end
 
   fun tag _parse_rpc_method(

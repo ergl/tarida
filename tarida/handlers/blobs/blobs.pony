@@ -12,6 +12,6 @@ actor BlobsHandler is Handler
     // TODO
     Debug.out("blobs: handle_disconnect!")
 
-  be handle_call(conn: RPCConnection, msg: RPCMessage iso) =>
+  be handle_call(conn: RPCConnection, msg: RPCMsg iso) =>
     // TODO
     Debug.out("blobs: handle_call of " + (consume msg).string())

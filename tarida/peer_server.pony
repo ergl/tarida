@@ -27,8 +27,16 @@ actor RPCConnection
     _active_handlers = Map[U32, Handler]
     _buffer = RPCDecoder
 
-  be write(data: ByteSeq) =>
-    _socket.write(consume data)
+  // be write(data: ByteSeq) =>
+  //   _socket.write(consume data)
+
+  be write(msg: RPCMsg iso) =>
+    // TODO(borja): Will writev work for this?
+    // Have to perform chunking here, or can we allow decode to do the chunking for us?
+    // Encode the msg, send it through
+    // _socet.write()
+    Debug.out("RPCConnection: should send" + msg.string())
+    None
 
   fun tag remote_pk(): Promise[Ed25519Public] =>
     let p = Promise[Ed25519Public]
@@ -54,7 +62,7 @@ actor RPCConnection
           _cleanup_handlers()
           _socket.dispose()
           break
-        | let msg: RPCMessage iso => _process_msg(consume msg)
+        | let msg: RPCMsg iso => _process_msg(consume msg)
         end
       else
         Debug.err("RPCConnection: _decode_packet bad packet")
@@ -69,7 +77,7 @@ actor RPCConnection
     _active_handlers.clear()
 
   // TODO(borja): If the message is of kind end/err, we should clean up the handler
-  fun ref _process_msg(msg: RPCMessage iso) =>
+  fun ref _process_msg(msg: RPCMsg iso) =>
     let seq = msg.header().packet_number
     // We take the absolute value of seq, since replies are in negative
     let h_key = seq.abs()
@@ -90,56 +98,57 @@ actor RPCConnection
       Debug.err(
         "RPCConnection: got reply to nonexistant handler at seq " + h_key.string()
       )
+
+      return
     end
 
     // To be able to handle a message, we have to know how. Right now, the
     // only way to do that is to inspect the namespace of a json method.
     // So, the message _must_ be json. If it isn't, drop it on the floor.
-    match (consume msg)
-    | let m: (RPCBinaryMessage iso | RPCStringMessage iso) =>
-      Debug.err(
-          "RPCConnection: can't handle msg " + m.string()
-        )
+    if msg.header().type_info isnt JSONMessage then
+      Debug.err("RPCConnection: can't handle msg " + msg.string())
+      return
+    end
 
-    | let jsonMessage: RPCJsonMessage iso =>
-        // The message also has to be a valid method. Again, drop it on the floor
-        // if it isn't (it's not a method if it doesn't have a namespace)
-        // TODO(borja): Look if there's a case where we get a legitimate non-json
-        // message without an already active handler.
-        match jsonMessage.namespace()
-        | let namespace: String =>
-          // TODO(borja): Consider the performance of this
-          // Right now, we're spawning a new actor everytime we encounter a new
-          // message stream (from a sequence number we haven't seen yet, and with
-          // a json body with a namespace we know how to handle). This could cause
-          // a DOS if a client spawns multiple messages of the same type but with
-          // different sequence numbers.
-          //
-          // Another issue is that spawning an entire actor might be wasteful.
-          // For messages that are not source (i.e. async/sync), it's better
-          // to have a long-running actor to handle those messages.
-          //
-          // Perhaps, if we encounter a message of type async/sync for the first
-          // time, spawn an actor, and don't despawn it: keep reusing it for the
-          // same message type, even if the sequence number is not the same.
-          match HandlerRegistrar(namespace)
-          | None =>
-              Debug.err(
-                "RPCConnection: don't know how to handle "
-                + namespace
-                + " messages. Got msg: "
-                + jsonMessage.string()
-              )
+    // The message also has to be a valid method. Again, drop it on the floor
+    // if it isn't (it's not a method if it doesn't have a namespace)
+    // TODO(borja): Look if there's a case where we get a legitimate non-json
+    // message without an already active handler.
+    let namespace = msg.namespace()
+    if namespace is None then
+      Debug.err("RPCConnection: bad json method " + msg.string())
+      return
+    end
 
-          | let h: Handler =>
-            h.handle_call(this, consume jsonMessage)
-            _active_handlers(h_key) = h
-          end
-        else
+    // TODO(borja): Consider the performance of this
+    // Right now, we're spawning a new actor everytime we encounter a new
+    // message stream (from a sequence number we haven't seen yet, and with
+    // a json body with a namespace we know how to handle). This could cause
+    // a DOS if a client spawns multiple messages of the same type but with
+    // different sequence numbers.
+    //
+    // Another issue is that spawning an entire actor might be wasteful.
+    // For messages that are not source (i.e. async/sync), it's better
+    // to have a long-running actor to handle those messages.
+    //
+    // Perhaps, if we encounter a message of type async/sync for the first
+    // time, spawn an actor, and don't despawn it: keep reusing it for the
+    // same message type, even if the sequence number is not the same.
+    try
+      let namespace_str = namespace as String // Can't error, we already know
+      match HandlerRegistrar(namespace_str)
+      | None =>
           Debug.err(
-            "RPCConnection: bad json method " + jsonMessage.string()
+           "RPCConnection: don't know how to handle "
+           + namespace_str
+           + " messages. Got msg: "
+           + msg.string()
           )
-        end
+
+      | let h: Handler =>
+            h.handle_call(this, consume msg)
+            _active_handlers(h_key) = h
+      end
     end
 
 primitive _BoxStreamExpectHeader
