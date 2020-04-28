@@ -70,7 +70,7 @@ actor RPCConnection
 
   // TODO(borja): If the message is of kind end/err, we should clean up the handler
   fun ref _process_msg(msg: RPCMessage iso) =>
-    let seq = msg.packet_number()
+    let seq = msg.header().packet_number
     // We take the absolute value of seq, since replies are in negative
     let h_key = seq.abs()
     if _active_handlers.contains(h_key) then

@@ -9,10 +9,19 @@ type RPCData is ( Array[U8]
                 | JsonDoc
                 )
 
+// Header info for the RPC message
+class val RPCMsgHeader
+  let packet_number: I32
+  let is_stream: Bool
+  let is_end_error: Bool
+
+  new val create(seq': I32, stream': Bool, end_error': Bool) =>
+    packet_number = seq'
+    is_stream = stream'
+    is_end_error = end_error'
+
 interface _RPCMessage
-  fun is_stream(): Bool
-  fun is_end_error(): Bool
-  fun packet_number(): I32
+  fun header(): RPCMsgHeader
   fun string(): String
   fun data(): this->RPCData^
 
@@ -36,9 +45,7 @@ class RPCjsonMethod
     args = args'
 
 class RPCBinaryMessage is _RPCMessage
-  let _seq: I32
-  let _stream: Bool
-  let _error: Bool
+  let _header: RPCMsgHeader
   let _data: Array[U8] ref
 
   new create(
@@ -47,14 +54,10 @@ class RPCBinaryMessage is _RPCMessage
     error_end: Bool,
     n: I32)
   =>
-    _seq = n
-    _stream = stream
-    _error = error_end
+    _header = RPCMsgHeader(n, stream, error_end)
     _data = consume ref data'
 
-  fun is_stream(): Bool => _stream
-  fun is_end_error(): Bool => _error
-  fun packet_number(): I32 => _seq
+  fun header(): RPCMsgHeader => _header
   fun string(): String =>
     let a = recover Array[U8] end
     for v in _data.values() do
@@ -65,9 +68,7 @@ class RPCBinaryMessage is _RPCMessage
   fun data(): this->Array[U8] => _data
 
 class RPCStringMessage is _RPCMessage
-  let _seq: I32
-  let _stream: Bool
-  let _error: Bool
+  let _header: RPCMsgHeader
   let _data: String ref
 
   new create(
@@ -76,21 +77,15 @@ class RPCStringMessage is _RPCMessage
     error_end: Bool,
     n: I32
   ) =>
-    _seq = n
-    _stream = stream
-    _error = error_end
+    _header = RPCMsgHeader(n, stream, error_end)
     _data = consume ref data'
 
-  fun is_stream(): Bool => _stream
-  fun is_end_error(): Bool => _error
-  fun packet_number(): I32 => _seq
+  fun header(): RPCMsgHeader => _header
   fun string(): String => _data.clone()
   fun data(): this->String ref => _data
 
 class RPCJsonMessage is _RPCMessage
-  let _seq: I32
-  let _stream: Bool
-  let _error: Bool
+  let _header: RPCMsgHeader
   let _inner_namespace: (String | None)
   let _data: (RPCjsonMethod | RPCrawJson)
 
@@ -100,17 +95,13 @@ class RPCJsonMessage is _RPCMessage
     error_end: Bool,
     n: I32
   ) =>
-    _seq = n
-    _stream = stream
-    _error = error_end
+    _header = RPCMsgHeader(n, stream, error_end)
     _data = consume ref data'
     _inner_namespace = match _data
     | let req: this->RPCjsonMethod => req.namespace
     else None end
 
-  fun is_stream(): Bool => _stream
-  fun is_end_error(): Bool => _error
-  fun packet_number(): I32 => _seq
+  fun header(): RPCMsgHeader => _header
   fun string(): String =>
     match _data
     | let resp: this->RPCrawJson =>
