@@ -28,8 +28,21 @@ actor RPCConnection
     _buffer = RPCDecoder
 
   be write(msg: RPCMsg iso) =>
-    var bytes = RPCEncoder(consume msg)
+    let msg' = consume msg
+    let repr = msg'.string()
+    let bytes = RPCEncoder(consume msg')
+    // If the message fits in a single chunk, send it directly
+    // Otherwise, we split it into chunks, and deliver them using writev
+    if bytes.size() <= 4096 then
+      Debug.out("RPCConnection: write " + repr)
+      _socket.write(consume bytes)
+    else
+      Debug.out("RPCConnection: scatter " + repr)
+      _scatter_byte_chunks(consume bytes)
+    end
 
+  fun _scatter_byte_chunks(bytes': Array[U8] iso) =>
+    var bytes = consume bytes'
     // If we perform chunking at a lower layer,
     // we'll end up coping a lot of things, since they get a `val` view
     let chunk_size: USize = 4096
@@ -196,15 +209,15 @@ class _BoxStreamNotify is TCPConnectionNotify
   fun ref connect_failed(conn: TCPConnection ref) => None
 
   fun ref sent(conn: TCPConnection ref, data: ByteSeq): ByteSeq =>
-    // TODO(borja): Encrypt data here. Will this be used?
-    // Remember the 4096 byte limit per byteseq
-    Debug.err("sending single byte seq will be dropped")
-    ""
+    // The client only calls write if the data fits into a single chunk
+    try
+      _boxstream.encrypt(data)?
+    else
+      Debug.err("_BoxStreamNotify: error while encryping write, drop it like it's hot")
+      ""
+    end
 
   fun ref sentv(conn: TCPConnection ref, data: ByteSeqIter): ByteSeqIter =>
-    // The upper layer already perfomed chunking, so we're safe
-    // TODO(borja): Encrypt data here. Will this be used?
-    // Remember the 4096 byte limit per byteseq
     // Since we get a val, we can't modify the data in place
     // But, we're only allocating a few chunks, so hopefully it's not too bad
     let io_vecs = recover Array[ByteSeq] end
@@ -212,7 +225,7 @@ class _BoxStreamNotify is TCPConnectionNotify
       try
         io_vecs.push(_boxstream.encrypt(chunk)?)
       else
-        Debug.err("_BoxStreamNotify: error while encrypting chunk")
+        Debug.err("_BoxStreamNotify: error while encryping chunk, drop it like it's hot")
       end
     end
 
