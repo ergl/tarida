@@ -9,7 +9,7 @@ debug:
 integration:
 	stable env ponyc -d tarida_shs_integration -o _build -b shs_tarida
 
-test: debug
+test:
 	stable env ponyc -d tarida_test -o _build -b test_tarida
 	./_build/test_tarida
 

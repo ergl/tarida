@@ -4,6 +4,7 @@ use "ponycheck"
 use "package:../tarida/shs"
 use "package:../tarida/sodium"
 use "package:../tarida_shs_integration"
+use "package:../tarida/rpc"
 
 actor Main is TestList
   new make() => None
@@ -11,6 +12,8 @@ actor Main is TestList
   fun tag tests(test: PonyTest) =>
     test(_TestSHS)
     test(Property1UnitTest[Array[U8]](_TestHexProperty))
+    test(Property1UnitTest[(I32, Bool, Bool, Array[U8])](_RPCArrEncodeProperty))
+    test(Property1UnitTest[(I32, Bool, Bool, String)](_RPCStrEncodeProperty))
 
 class iso _TestHexProperty is Property1[Array[U8]]
   fun name(): String => "hex/property"
@@ -24,6 +27,83 @@ class iso _TestHexProperty is Property1[Array[U8]]
     else
       ph.fail()
     end
+
+class iso _RPCArrEncodeProperty is Property4[I32, Bool, Bool, Array[U8]]
+  fun name(): String => "rpc_array_encode/property"
+
+  fun gen1(): Generator[I32] => Generators.i32()
+  fun gen2(): Generator[Bool] => Generators.bool()
+  fun gen3(): Generator[Bool] => Generators.bool()
+  fun gen4(): Generator[Array[U8]] =>
+    Generators.array_of[U8](Generators.u8())
+
+  fun property4(
+    seq: I32,
+    stream: Bool,
+    err: Bool,
+    data: Array[U8],
+    ph: PropertyHelper)
+  =>
+
+    let iso_array = recover Array[U8](data.size()) end
+    for byte in data.values() do
+      iso_array.push(byte)
+    end
+
+    let header = RPCMsgHeader(seq, stream, err, BinaryMessage)
+    // from message to bytes
+    let bytes = RPCEncoder(recover RPCMsg(header, consume iso_array) end)
+    let decoder = RPCDecoder(bytes.size())
+    decoder.append(consume bytes)
+    try
+      match decoder.decode_msg()?
+      | None => ph.fail()
+      | Goodbye => ph.fail()
+      | let msg: RPCMsg iso =>
+        ph.assert_eq[I32](seq, msg.header().packet_number)
+        ph.assert_eq[Bool](stream, msg.header().is_stream)
+        ph.assert_eq[Bool](err, msg.header().is_end_error)
+        ph.assert_is[RPCMsgTypeInfo](BinaryMessage, msg.header().type_info)
+        ph.assert_array_eq[U8](data, ((consume msg).data() as Array[U8]))
+      end
+    else ph.fail() end
+
+class iso _RPCStrEncodeProperty is Property4[I32, Bool, Bool, String]
+  fun name(): String => "rpc_string_encode/property"
+
+  fun gen1(): Generator[I32] => Generators.i32()
+  fun gen2(): Generator[Bool] => Generators.bool()
+  fun gen3(): Generator[Bool] => Generators.bool()
+  fun gen4(): Generator[String] =>
+    Generators.utf32_codepoint_string(Generators.u32())
+
+  fun property4(
+    seq: I32,
+    stream: Bool,
+    err: Bool,
+    data: String,
+    ph: PropertyHelper)
+  =>
+
+    let iso_data = data.clone()
+    let header = RPCMsgHeader(seq, stream, err, StringMessage)
+    // from message to bytes
+    let bytes = RPCEncoder(recover RPCMsg(header, consume iso_data) end)
+    let decoder = RPCDecoder(bytes.size())
+    decoder.append(consume bytes)
+    try
+      match decoder.decode_msg()?
+      | None => ph.fail()
+      | Goodbye => ph.fail()
+      | let msg: RPCMsg iso =>
+        ph.assert_eq[I32](seq, msg.header().packet_number)
+        ph.assert_eq[Bool](stream, msg.header().is_stream)
+        ph.assert_eq[Bool](err, msg.header().is_end_error)
+        ph.assert_is[RPCMsgTypeInfo](StringMessage, msg.header().type_info)
+        let str_data = recover val (consume msg).data() as String ref end
+        ph.assert_eq[String](data, str_data)
+      end
+    else ph.fail() end
 
 class iso _TestSHS is UnitTest
   var _server_public: (Ed25519Public | None) = None

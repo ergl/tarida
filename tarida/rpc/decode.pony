@@ -6,7 +6,7 @@ primitive Goodbye
 class RPCDecoder
   let _type_mask: U8 = 0x3
   let _end_mask: U8 = 0x4
-  let _stream_mask: U8 = 0x5
+  let _stream_mask: U8 = 0x8
 
   var _buffer: Array[U8] iso
 
