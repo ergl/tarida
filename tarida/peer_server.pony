@@ -75,7 +75,6 @@ actor RPCConnection
     promise(_remote_pk)?
 
   be _chunk(data: (String iso | Array[U8] iso)) =>
-    Debug.out("Have left in buffer: " + _buffer.size().string())
     _buffer.append(consume data)
     _try_process_chunks()
 
@@ -213,7 +212,7 @@ class _BoxStreamNotify is TCPConnectionNotify
     try
       _boxstream.encrypt(data)?
     else
-      Debug.err("_BoxStreamNotify: error while encryping write, drop it like it's hot")
+      Debug.err("_BoxStreamNotify: error while encrypting write, drop it like it's hot")
       ""
     end
 
@@ -225,7 +224,7 @@ class _BoxStreamNotify is TCPConnectionNotify
       try
         io_vecs.push(_boxstream.encrypt(chunk)?)
       else
-        Debug.err("_BoxStreamNotify: error while encryping chunk, drop it like it's hot")
+        Debug.err("_BoxStreamNotify: error while encrypting chunk, drop it like it's hot")
       end
     end
 
@@ -242,13 +241,9 @@ class _BoxStreamNotify is TCPConnectionNotify
     try
       match _state
       | _BoxStreamExpectHeader =>
-        Debug.out("_BoxStreamNotify recv header of size " + msg.size().string())
         let result = _boxstream.decrypt_header(consume msg)?
         match result
-        | None => // goodbye
-          Debug.out("Recv a goodbye")
-          conn.close()
-
+        | None => conn.close() // goodbye
         | (let next_expect: USize, let auth_tag: String) =>
             conn.expect(next_expect)?
             _state = _BoxStreamExpectBody(auth_tag)

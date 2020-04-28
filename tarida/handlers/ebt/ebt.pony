@@ -5,13 +5,8 @@ use "package:../../rpc"
 use "package:../../ssbjson"
 
 actor EBTHandler is Handler
-  be handle_init(conn: RPCConnection) =>
-    // TODO
-    Debug.out("ebt: init!")
-
-  be handle_disconnect(conn: RPCConnection) =>
-    // TODO
-    Debug.out("ebt: handle_disconnect!")
+  be handle_init(conn: RPCConnection) => None // TODO
+  be handle_disconnect(conn: RPCConnection) => None // TODO
 
   be handle_call(conn: RPCConnection, msg: RPCMsg iso) =>
     let msg' = consume ref msg
@@ -23,7 +18,7 @@ actor EBTHandler is Handler
   fun ref _dispatch_method(conn: RPCConnection, header: RPCMsgHeader, method: RPCjsonMethod) =>
     match method.name
     | "ebt.replicate" => _handle_replicate(conn, header, method.args)
-    else Debug("ebt: don't know how to handle " + method.name) end
+    else Debug.err("ebt: don't know how to handle " + method.name) end
 
   fun ref _handle_replicate(conn: RPCConnection, header: RPCMsgHeader, args: JsonArray) =>
     conn.write(recover

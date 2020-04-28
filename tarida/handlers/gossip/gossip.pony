@@ -26,12 +26,8 @@ actor GossipHandler is Handler
   let _timer_wheel: t.Timers = t.Timers
   var _active_timer: (t.Timer tag | None) = None
 
-  be handle_init(conn: RPCConnection) =>
-    // TODO(borja): Anything here?
-    Debug.out("gossip: init!")
-
+  be handle_init(conn: RPCConnection) => None // TODO
   be handle_disconnect(conn: RPCConnection) =>
-    Debug.out("gossip: handle_disconnect!")
     match _active_timer
     | let handle: t.Timer tag =>
         _timer_wheel.cancel(handle)
@@ -47,7 +43,7 @@ actor GossipHandler is Handler
   fun ref _dispatch_method(conn: RPCConnection, header: RPCMsgHeader, method: RPCjsonMethod) =>
     match method.name
     | "gossip.ping" => _handle_ping(conn, header, method.args)
-    else Debug("gossip: don't know how to handle" + method.name) end
+    else Debug.err("gossip: don't know how to handle" + method.name) end
 
   fun ref _handle_ping(conn: RPCConnection, header: RPCMsgHeader, args: JsonArray) =>
     """

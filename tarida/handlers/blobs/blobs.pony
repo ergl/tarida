@@ -5,14 +5,8 @@ use "package:../../rpc"
 use "package:../../ssbjson"
 
 actor BlobsHandler is Handler
-  be handle_init(conn: RPCConnection) =>
-    // TODO
-    Debug.out("blobs: init!")
-
-  be handle_disconnect(conn: RPCConnection) =>
-    // TODO
-    Debug.out("blobs: handle_disconnect!")
-
+  be handle_init(conn: RPCConnection) => None // TODO
+  be handle_disconnect(conn: RPCConnection) => None // TODO
   be handle_call(conn: RPCConnection, msg: RPCMsg iso) =>
     let msg' = consume ref msg
     match msg'.data()
@@ -25,7 +19,7 @@ actor BlobsHandler is Handler
     else Debug.out("blobs: don't know how to handle " + method.name) end
 
   fun ref _handle_wants(conn: RPCConnection, header: RPCMsgHeader) =>
-    // Send an empty `wants` 
+    // Send an empty `wants`
     conn.write(recover
       RPCMsg.reply_from(header, recover RPCrawJSON(JsonObject) end)
     end)
