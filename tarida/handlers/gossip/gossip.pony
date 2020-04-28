@@ -1,7 +1,7 @@
 use "debug"
-use "package:.." // For `Handler`
-use "package:../.." // For `RPCConnection`
-use "package:../../rpc" // For `RPCMessage`
+use "package:.."
+use "package:../.."
+use "package:../../rpc"
 
 actor GossipHandler is Handler
   be handle_init(conn: RPCConnection) =>
@@ -14,4 +14,4 @@ actor GossipHandler is Handler
 
   be handle_call(conn: RPCConnection, msg: RPCMsg iso) =>
     // TODO
-    Debug.out("gossip: handle_call of " + (consume msg).string())
+    Debug.out("gossip: handle_call of " + msg.string())

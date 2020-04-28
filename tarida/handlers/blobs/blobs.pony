@@ -1,7 +1,7 @@
 use "debug"
-use "package:.." // For `Handler`
-use "package:../.." // For `RPCConnection`
-use "package:../../rpc" // For `RPCMessage`
+use "package:.."
+use "package:../.."
+use "package:../../rpc"
 
 actor BlobsHandler is Handler
   be handle_init(conn: RPCConnection) =>
@@ -14,4 +14,4 @@ actor BlobsHandler is Handler
 
   be handle_call(conn: RPCConnection, msg: RPCMsg iso) =>
     // TODO
-    Debug.out("blobs: handle_call of " + (consume msg).string())
+    Debug.out("blobs: handle_call of " + msg.string())
