@@ -69,7 +69,7 @@ class RPCMsg
   new error_close_from(from: RPCMsgHeader, payload: RPCData iso) =>
     _data = consume ref payload
     _header = RPCMsgHeader(where packet_number' = from.packet_number.neg(),
-                                 is_stream' = false,
+                                 is_stream' = from.is_stream,
                                  type_info' = from.type_info,
                                  is_end_error' = true)
 
@@ -79,13 +79,13 @@ class RPCMsg
       let contents = Map[String, JsonType].create(3)
       contents("name") = "Error"
       contents("message") = error_msg
-      contents("stack") = "" // Can omit?
+      contents("stack") = ""
       RPCrawJSON(JsonObject.from_map(contents))
     end
 
     _data = consume ref error_payload
     _header = RPCMsgHeader(where packet_number' = from.packet_number.neg(),
-                                 is_stream' = false,
+                                 is_stream' = from.is_stream,
                                  type_info' = JSONMessage,
                                  is_end_error' = true)
 
