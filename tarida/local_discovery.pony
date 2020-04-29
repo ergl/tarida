@@ -113,8 +113,14 @@ actor Discovery
   let _ann_regex: (Regex | None)
   let _found_peers: Set[String] = Set[String]
 
-  new create(auth: AmbientAuth, pk: String, host: String, port: String, peer_port: String) =>
-    _auth = NetAuth(auth)
+  new create(
+    auth: NetAuth,
+    pk: String,
+    host: String,
+    port: String,
+    peer_port: String)
+  =>
+    _auth = auth
     _ann_regex = try Regex("^net:(.+):(\\d+)~shs:(.+)$")? else None end
     _self_pk = pk
     _self_ip = host
