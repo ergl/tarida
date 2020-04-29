@@ -1,6 +1,7 @@
 use "package:../ssbjson"
 use "itertools"
 use "debug"
+use fmt = "Format"
 
 primitive Goodbye
 
@@ -63,6 +64,11 @@ class RPCDecoder
     | 0x1 => StringMessage
     | 0x2 => JSONMessage
     else error end
+
+    ifdef debug then
+      let repr = fmt.Format.int[U8](flags, fmt.FormatBinary)
+      Debug.out("RPCDecoder: [flags=" + consume repr + ", req=" + req_number.string() + "]")
+    end
 
     _buffer.trim_in_place(header_size)
 

@@ -44,7 +44,6 @@ actor RPCConnectionServer
     // If the message fits in a single chunk, send it directly
     // Otherwise, we split it into chunks, and deliver them using writev
     if bytes.size() <= 4096 then
-      Debug.out("RPCConnectionServer: write " + repr)
       _socket.write(consume bytes)
     else
       Debug.out("RPCConnectionServer: scatter " + repr)
@@ -247,14 +246,13 @@ class _BoxStreamNotify is TCPConnectionNotify
         let result = _boxstream.decrypt_header(consume msg)?
         match result
         | None => conn.close() // goodbye
+
         | (let next_expect: USize, let auth_tag: String) =>
             conn.expect(next_expect)?
             _state = _BoxStreamExpectBody(auth_tag)
         end
 
       | let info: _BoxStreamExpectBody =>
-        Debug.out("_BoxStreamNotify recv body of size " + msg.size().string())
-
         _notify._chunk(_boxstream.decrypt(info.auth_tag, msg)?.iso_array())
         conn.expect(_boxstream.header_size())?
         _state = _BoxStreamExpectHeader

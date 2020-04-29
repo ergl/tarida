@@ -1,5 +1,7 @@
 use "package:../ssbjson"
 use "collections"
+use "debug"
+use fmt = "format"
 
 primitive RPCEncoder
   fun val apply(msg: RPCMsg iso): Array[U8] iso^ =>
@@ -12,16 +14,21 @@ primitive RPCEncoder
     | JSONMessage => 0x2
     end
 
+    let flags = (rpc_stream << 3) or
+                (rpc_end_error << 2) or
+                rpc_kind
+
+    ifdef debug then
+      let repr = fmt.Format.int[U8](flags, fmt.FormatBinary)
+      Debug.out("RPCEncoder: [flags=" + consume repr + "]: " + msg.string())
+    end
+
     let rpc_body = _encode_body(recover (consume msg).data() end)
     let rpc_body_size = rpc_body.size()
 
     let buffer = recover
       Array[U8].create(9 + rpc_body_size)
     end
-
-    let flags = (rpc_stream << 3) or
-                (rpc_end_error << 2) or
-                rpc_kind
 
     buffer.push_u8(flags)
     ifdef bigendian then
