@@ -1,6 +1,7 @@
 use "package:../ssbjson"
 use "itertools"
 use "collections"
+use "debug"
 
 class RPCrawJSON
   let _data: JsonType
@@ -74,6 +75,8 @@ class RPCMsg
                                  is_end_error' = true)
 
   new json_error_from(from: RPCMsgHeader, error_msg: String) =>
+    Debug.err(error_msg)
+
     // TODO(borja): Are all errors like this?
     let error_payload = recover
       let contents = Map[String, JsonType].create(3)

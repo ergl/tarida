@@ -33,6 +33,7 @@ actor Main
 
       // TODO(borja): Add command to create this on demand
       Debug.out("Pub invite: " + consume invite)
+      Debug.out("Invites should supply: " + Identity.cypherlink(inv_pub))
     end
 
     PeerServer(auth, self_pk, self_sk, peering_port)

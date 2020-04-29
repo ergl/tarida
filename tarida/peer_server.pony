@@ -205,6 +205,7 @@ class _BoxStreamNotify is TCPConnectionNotify
     _state = _BoxStreamExpectHeader
 
     _socket = socket
+    Debug.out("succesfully connected to: " + Identity.cypherlink(remote_pk))
     _notify = RPCConnectionServer(_socket, remote_pk)
 
   fun ref connect_failed(conn: TCPConnection ref) => None

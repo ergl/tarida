@@ -8,6 +8,19 @@ primitive Identity
   fun encode(pub: Ed25519Public): String iso^ =>
     Base64.encode(pub where linelen = 64, linesep = "")
 
+  fun cypherlink(pub: Ed25519Public): String iso^ =>
+    recover
+      // @ + base64 + .ed25519
+      let suffix = ".ed25519"
+      let base = encode(pub)
+      let b_size = base.size()
+      String
+        .create(1 + b_size + suffix.size())
+        .>push('@')
+        .>append(consume base)
+        .>append(suffix)
+    end
+
   fun encode_invite(domain: String, port: String, pub: Ed25519Public, seed: String): String iso^ =>
     let pk = encode(pub)
     let invite_key = Base64.encode(seed where linelen = 64, linesep = "")
