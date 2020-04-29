@@ -5,7 +5,6 @@ use "debug"
 use "rpc"
 use "handlers"
 use "collections"
-use "promises"
 
 // SHS/RPC Ideas:
 // On starting, our TCP server uses a Handshake notify, that performs the SHS mechanism.
@@ -14,30 +13,41 @@ use "promises"
 // The next layer is the RPC mechanism, which also handles framing.
 // The RPC layer can either be the final layer, or delegate RPC header parsing to another notifier.
 
-actor RPCConnection
+class val RPCConnection
+  let remote_pk: Ed25519Public
+  let _proxy: RPCConnectionServer
+
+  new val create(proxy: RPCConnectionServer, remote_pk': Ed25519Public) =>
+    _proxy = proxy
+    remote_pk = remote_pk'
+
+  fun write(msg: RPCMsg iso): None =>
+    _proxy._write(consume msg)
+
+actor RPCConnectionServer
   let _socket: TCPConnection
-  let _remote_pk: Ed25519Public
   // A mapping of sequence number to handler on that stream
   embed _active_handlers: Map[U32, Handler]
   embed _buffer: RPCDecoder
+  embed _conn: RPCConnection
 
   new create(raw_socket: TCPConnection, other_pk: Ed25519Public) =>
     _socket = raw_socket
-    _remote_pk = other_pk
     _active_handlers = Map[U32, Handler]
     _buffer = RPCDecoder
+    _conn = RPCConnection(this, other_pk)
 
-  be write(msg: RPCMsg iso) =>
+  be _write(msg: RPCMsg iso) =>
     let msg' = consume msg
     let repr = msg'.string()
     let bytes = RPCEncoder(consume msg')
     // If the message fits in a single chunk, send it directly
     // Otherwise, we split it into chunks, and deliver them using writev
     if bytes.size() <= 4096 then
-      Debug.out("RPCConnection: write " + repr)
+      Debug.out("RPCConnectionServer: write " + repr)
       _socket.write(consume bytes)
     else
-      Debug.out("RPCConnection: scatter " + repr)
+      Debug.out("RPCConnectionServer: scatter " + repr)
       _scatter_byte_chunks(consume bytes)
     end
 
@@ -66,14 +76,6 @@ actor RPCConnection
 
     _socket.writev(consume io_vecs)
 
-  fun tag remote_pk(): Promise[Ed25519Public] =>
-    let p = Promise[Ed25519Public]
-    _fetch_remote_pk(p)
-    p
-
-  be _fetch_remote_pk(promise: Promise[Ed25519Public]) =>
-    promise(_remote_pk)?
-
   be _chunk(data: (String iso | Array[U8] iso)) =>
     _buffer.append(consume data)
     _try_process_chunks()
@@ -84,7 +86,7 @@ actor RPCConnection
         match _buffer.decode_msg()?
         | None => break
         | Goodbye =>
-          Debug.out("RPCConnection: goodbye")
+          Debug.out("RPCConnectionServer: goodbye")
           // The client is going away, clean up all resources
           _cleanup_handlers()
           _socket.dispose()
@@ -92,14 +94,14 @@ actor RPCConnection
         | let msg: RPCMsg iso => _process_msg(consume msg)
         end
       else
-        Debug.err("RPCConnection: _decode_packet bad packet")
+        Debug.err("RPCConnectionServer: _decode_packet bad packet")
         break
       end
     end
 
   fun ref _cleanup_handlers() =>
     for h in _active_handlers.values() do
-      h.handle_disconnect(this)
+      h.handle_disconnect(_conn)
     end
     _active_handlers.clear()
 
@@ -111,7 +113,7 @@ actor RPCConnection
     if _active_handlers.contains(h_key) then
       try
         let handler_for_msg = _active_handlers(h_key)?
-        handler_for_msg.handle_call(this, consume msg)
+        handler_for_msg.handle_call(_conn, consume msg)
       end
 
       return
@@ -123,7 +125,7 @@ actor RPCConnection
     // simply drop the message on the floor
     if seq < 0 then
       Debug.err(
-        "RPCConnection: got reply to nonexistant handler at seq " + h_key.string()
+        "RPCConnectionServer: got reply to nonexistant handler at seq " + h_key.string()
       )
 
       return
@@ -133,7 +135,7 @@ actor RPCConnection
     // only way to do that is to inspect the namespace of a json method.
     // So, the message _must_ be json. If it isn't, drop it on the floor.
     if msg.header().type_info isnt JSONMessage then
-      Debug.err("RPCConnection: can't handle msg " + msg.string())
+      Debug.err("RPCConnectionServer: can't handle msg " + msg.string())
       return
     end
 
@@ -143,7 +145,7 @@ actor RPCConnection
     // message without an already active handler.
     let namespace = msg.namespace()
     if namespace is None then
-      Debug.err("RPCConnection: bad json method " + msg.string())
+      Debug.err("RPCConnectionServer: bad json method " + msg.string())
       return
     end
 
@@ -166,14 +168,14 @@ actor RPCConnection
       match HandlerRegistrar(namespace_str)
       | None =>
           Debug.err(
-           "RPCConnection: don't know how to handle "
+           "RPCConnectionServer: don't know how to handle "
            + namespace_str
            + " messages. Got msg: "
            + msg.string()
           )
 
       | let h: Handler =>
-            h.handle_call(this, consume msg)
+            h.handle_call(_conn, consume msg)
             _active_handlers(h_key) = h
       end
     end
@@ -189,7 +191,7 @@ type _BoxStreamNotifyState is (_BoxStreamExpectHeader | _BoxStreamExpectBody)
 class _BoxStreamNotify is TCPConnectionNotify
   let _socket: TCPConnection
 
-  let _notify: RPCConnection
+  let _notify: RPCConnectionServer
 
   let _boxstream: BoxStream
   var _state: _BoxStreamNotifyState
@@ -203,7 +205,7 @@ class _BoxStreamNotify is TCPConnectionNotify
     _state = _BoxStreamExpectHeader
 
     _socket = socket
-    _notify = RPCConnection(_socket, remote_pk)
+    _notify = RPCConnectionServer(_socket, remote_pk)
 
   fun ref connect_failed(conn: TCPConnection ref) => None
 
