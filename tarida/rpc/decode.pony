@@ -1,5 +1,6 @@
 use "package:../ssbjson"
 use "itertools"
+use "debug"
 
 primitive Goodbye
 
@@ -130,12 +131,25 @@ class RPCDecoder
         end
       })?
 
-    // FIXME(borja): Manyverse sends this message without `type` key
-    // Ideally, we'd read ssb/manifest.json to see what the type is,
-    // if the other side is not sending that key.
-    let msg_type = match flat_name
-    | "tunnel.isRoom" => "async"
-    else obj_data("type")? as String end
+    let msg_type = match obj_data.get_or_else("type", None)
+    | let s: String => s
+    else // It returns a JsonType, but we only care about (String | None)
+      Debug.out(
+        "_parse_rpc_method incoming method "
+        + flat_name
+        + " has missing type, will try to recover"
+      )
+      // FIXME(borja): Manyverse sends some messages without `type` key
+      // Ideally, we'd read ssb/manifest.json to see what the type is,
+      // if the other side is not sending that key.
+      match flat_name
+      | "tunnel.isRoom" => "async"
+      | "invite.use" => "async"
+      else
+        Debug.err("_parse_rpc_method couldn't assign type to " + flat_name)
+        error
+      end
+    end
 
     let args = obj_data("args")? as JsonArray
     RPCjsonMethod(method_namespace, flat_name, msg_type, args)
