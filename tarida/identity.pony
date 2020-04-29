@@ -21,6 +21,9 @@ primitive Identity
         .>append(suffix)
     end
 
+  fun decode_cypherlink(link: String): ByteSeq? =>
+    Base64.decode(link.trim(1, link.find(".ed25519")?.usize()))?
+
   fun encode_invite(domain: String, port: String, pub: Ed25519Public, seed: String): String iso^ =>
     let pk = encode(pub)
     let invite_key = Base64.encode(seed where linelen = 64, linesep = "")

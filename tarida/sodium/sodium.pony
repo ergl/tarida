@@ -147,6 +147,20 @@ primitive Sodium
 
     (Ed25519Public(consume pk), Ed25519Secret(consume sk))
 
+  fun ed25519_pk_from_bytes(byte_seq: ByteSeq): Ed25519Public? =>
+    let public_size = @crypto_sign_publickeybytes()
+    if byte_seq.size() != public_size then
+      error
+    end
+
+    let pk = _make_buffer(public_size)
+    let bytes = match byte_seq
+    | let s: String => s.array()
+    | let a: Array[U8] val => a
+    end
+    pk.copy_from(bytes, 0, 0, public_size)
+    Ed25519Public(consume pk)
+
   fun ed25519_pair_sk_to_pk(sk: Ed25519Secret): Ed25519Public? =>
     let pk = _make_buffer(@crypto_sign_publickeybytes())
     let ret = @crypto_sign_ed25519_sk_to_pk(pk.cpointer(), sk.cpointer())

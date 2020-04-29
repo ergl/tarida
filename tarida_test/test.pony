@@ -5,6 +5,7 @@ use "package:../tarida/shs"
 use "package:../tarida/sodium"
 use "package:../tarida_shs_integration"
 use "package:../tarida/rpc"
+use tarida = "package:../tarida"
 
 actor Main is TestList
   new make() => None
@@ -12,6 +13,7 @@ actor Main is TestList
   fun tag tests(test: PonyTest) =>
     test(_TestSHS)
     test(Property1UnitTest[Array[U8]](_TestHexProperty))
+    test(Property1UnitTest[Array[U8] iso](_TestCypherLinkProperty))
     test(Property1UnitTest[(I32, Bool, Bool, Array[U8])](_RPCArrEncodeProperty))
     test(Property1UnitTest[(I32, Bool, Bool, String)](_RPCStrEncodeProperty))
 
@@ -104,6 +106,28 @@ class iso _RPCStrEncodeProperty is Property4[I32, Bool, Bool, String]
         ph.assert_eq[String](data, str_data)
       end
     else ph.fail() end
+
+class iso _TestCypherLinkProperty is Property1[Array[U8] iso]
+  fun name(): String => "cypherlink/encode_decode/propery"
+
+  fun gen(): Generator[Array[U8] iso] =>
+    Generators.iso_seq_of[U8, Array[U8] iso](
+        Generators.u8(),
+        32,
+        32
+    )
+
+  fun property(bytes': Array[U8] iso, ph: PropertyHelper) =>
+    try
+      Sodium.init()?
+      let bytes = consume val bytes'
+      let public_key = Sodium.ed25519_pk_from_bytes(bytes)?
+      let cypherlink = tarida.Identity.cypherlink(public_key)
+      let bytes_again = tarida.Identity.decode_cypherlink(consume cypherlink)?
+      ph.assert_array_eq[U8](bytes, bytes_again)
+    else
+      ph.fail()
+    end
 
 class iso _TestSHS is UnitTest
   var _server_public: (Ed25519Public | None) = None
