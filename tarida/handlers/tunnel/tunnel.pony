@@ -7,6 +7,9 @@ use "package:../../ssbjson"
 // Docs: look at https://github.com/staltz/ssb-room/blob/master/tunnel/server.js
 // and https://github.com/ssbc/ssb-tunnel
 
+// https://hackmd.io/Yx8I1n9DTSCaHx6CQk5XcA?view
+// UML diagrams for "rooms"
+
 actor TunnelHandler is Handler
   be handle_init(conn: RPCConnection) => None // TODO
   be handle_disconnect(conn: RPCConnection) => None // TODO
