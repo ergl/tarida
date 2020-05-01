@@ -8,6 +8,10 @@ primitive Identity
   fun encode(pub: Ed25519Public): String iso^ =>
     Base64.encode(pub where linelen = 64, linesep = "")
 
+  fun decode(bytes: String): Ed25519Public? =>
+    let dec = Base64.decode(bytes)?
+    Sodium.ed25519_pk_from_bytes(consume dec)?
+
   fun cypherlink(pub: Ed25519Public): String iso^ =>
     recover
       // @ + base64 + .ed25519

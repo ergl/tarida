@@ -13,6 +13,7 @@ class val ClientConfig
 class val TaridaConfig
   var config_path: String = ""
   var enable_discovery: Bool = false
+  var enable_autoconnect: Bool = false
   var peering_port: String = "9999"
   var local_broadcast_ip: String = ""
   var mode_config : (ServerConfig | ClientConfig) = ServerConfig
@@ -47,6 +48,10 @@ primitive ArgConfig
                           "Tells tarida the IP used to broadcast to peers locally",
                           'b')
 
+        OptionSpec.bool("autoconnect",
+                        "Autoconnect to local announcements"
+                        where default' = false)
+
         OptionSpec.string("id_path",
                           "Tells tarida where to find the configuration file",
                           'f')
@@ -75,7 +80,22 @@ primitive ArgConfig
     end
 
   fun _fill_client_config(env: Env, config: TaridaConfig iso, cmd: Command): TaridaConfig? =>
-    error
+    let client_config = ClientConfig
+    let target_pk = cmd.option("target_pk").string()
+    let target_ip = cmd.option("target_ip").string()
+    let target_port = cmd.option("target_port").string()
+
+    if (target_pk.size() == 0) or (target_port.size() == 0) then
+      env.err.print("Error: no real data supplied")
+      env.exitcode(1)
+      error
+    end
+
+    client_config.target_pk = target_pk
+    client_config.target_ip = target_ip
+    client_config.target_port = target_port
+    config.mode_config = consume client_config
+    config
 
   fun _fill_server_config(env: Env, config: TaridaConfig iso, cmd: Command): TaridaConfig? =>
     let server_config = ServerConfig
@@ -109,6 +129,7 @@ primitive ArgConfig
     end
 
     config.enable_discovery = (config.local_broadcast_ip != "")
+    config.enable_autoconnect = cmd.option("autoconnect").bool()
     match cmd.fullname()
     | "tarida/client" => _fill_client_config(env, consume config, cmd)?
     | "tarida/server" => _fill_server_config(env, consume config, cmd)?

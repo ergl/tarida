@@ -6,9 +6,11 @@
 use "net"
 use "time"
 use "regex"
-use "collections"
-
 use "debug"
+use "collections"
+use "bureaucracy"
+
+use "sodium"
 
 class iso _BroadcastSenderTimer is TimerNotify
   let _discovery: Discovery
@@ -94,8 +96,10 @@ class iso _BroadcastReceiver is UDPNotify
     Debug.out("_BroadcastReceiver closed")
 
 actor Discovery
-  let _auth: NetAuth
-  let _self_pk: String
+  let _auth: AmbientAuth
+  let _self_pk: Ed25519Public
+  let _self_sk: Ed25519Secret
+  let _self_identity: String // _self_pk in encoded form
 
   let _self_ip: String
   let _self_port: String
@@ -112,37 +116,44 @@ actor Discovery
 
   let _ann_regex: (Regex | None)
   let _found_peers: Set[String] = Set[String]
+  let _connection_custodian: (Custodian | None)
 
   new create(
     auth: AmbientAuth,
-    pk: String,
+    pk: Ed25519Public,
+    sk: Ed25519Secret,
     host: String,
     port: String,
-    peer_port: String)
+    peer_port: String,
+    conn_custodian: (Custodian | None) = None)
   =>
-    _auth = NetAuth(auth)
+    _auth = auth
     _ann_regex = try Regex("^net:(.+):(\\d+)~shs:(.+)$")? else None end
     _self_pk = pk
+    _self_sk = sk
+    _self_identity = Identity.encode(_self_pk)
     _self_ip = host
     _self_port = port
     _peer_port = peer_port
+    _connection_custodian = conn_custodian
 
+    let net_auth = NetAuth(auth)
     Debug.out("Discovery will advertise on " + _self_ip + ":" + _self_port)
-    _snd_socket = UDPSocket(_auth, _BroadcastSender(this), _self_ip, _self_port)
-    _recv_socket = UDPSocket(_auth, _BroadcastReceiver(_auth, this), "", _self_port)
+    _snd_socket = UDPSocket(net_auth, _BroadcastSender(this), _self_ip, _self_port)
+    _recv_socket = UDPSocket(net_auth, _BroadcastReceiver(net_auth, this), "", _self_port)
     _announcement = recover val
-      String.create(4 + _self_ip.size() + 1 + _peer_port.size() + 5 + _self_pk.size())
+      String.create(4 + _self_ip.size() + 1 + _peer_port.size() + 5 + _self_identity.size())
         .>append("net:")
         .>append(_self_ip)
         .>push(':')
         .>append(_peer_port)
         .>append("~shs:")
-        .>append(_self_pk)
+        .>append(_self_identity)
     end
 
   be _snd_sock_ready() =>
     try
-      _broadcast_addr = DNS.broadcast_ip4(_auth, _self_port)(0)?
+      _broadcast_addr = DNS.broadcast_ip4(NetAuth(_auth), _self_port)(0)?
       let handle = Timer(_BroadcastSenderTimer(this), _broadcast_interval, _broadcast_interval)
       _timer_handle = recover tag handle end
       _timer_wheel(consume handle)
@@ -160,22 +171,39 @@ actor Discovery
       let ann = maybe_ann.split(";")(0)?
       let matches = (_ann_regex as Regex)(ann)?
 
-      let peer_ip = matches(1)?
-      let peer_port = matches(2)?
-      let peer_pub_iso = matches(3)?
-      let peer_pub = consume val peer_pub_iso
+      let peer_ip: String = matches(1)?
+      let peer_port: String = matches(2)?
+      let peer_pub: String = matches(3)?
 
       // Ignore self
-      if (peer_pub == _self_pk) or _found_peers.contains(peer_pub) then
+      if (peer_pub == _self_identity) or _found_peers.contains(peer_pub) then
         return
       end
 
       Debug.out("Discovery found peer "
-                + (consume peer_ip)
+                + peer_ip
                 + ":"
-                + (consume peer_port)
+                + peer_port
                 + "~"
                 + peer_pub)
+
+      match _connection_custodian
+      | None => None
+      | let c: Custodian =>
+          Debug.out("Discovery: autoconnect to " + peer_pub)
+          // Autoconnect is enabled
+          let conn = Handshake.client(
+            _auth,
+            _self_pk,
+            _self_sk,
+            Identity.decode(peer_pub)?,
+            peer_ip,
+            peer_port
+          )
+
+          // Register connection
+          c.apply(conn)
+      end
 
       _found_peers.set(peer_pub)
     end

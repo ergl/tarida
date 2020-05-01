@@ -1,5 +1,6 @@
 use "shs"
 use "sodium"
+use "bureaucracy"
 
 use "net"
 use "debug"
@@ -9,32 +10,47 @@ class iso _SHSNotify is TCPConnectionNotify
   let _self_sk: Ed25519Secret
   let _target_pk: (Ed25519Public | None)
   let _shs: (HandshakeServer | HandshakeClient)
+  let _registry: (Custodian | None)
 
-  new iso server(pk: Ed25519Public, sk: Ed25519Secret, shs: HandshakeServer iso) =>
+  new iso server(
+    pk: Ed25519Public,
+    sk: Ed25519Secret,
+    registry: Custodian,
+    shs: HandshakeServer iso)
+  =>
     _self_pk = pk
     _self_sk = sk
     _target_pk = None
+    _registry = registry
     _shs = consume ref shs
 
-  new iso client(pk: Ed25519Public, sk: Ed25519Secret, other_pk: Ed25519Public, shs: HandshakeClient iso) =>
+  new iso client(
+    pk: Ed25519Public,
+    sk: Ed25519Secret,
+    other_pk: Ed25519Public,
+    shs: HandshakeClient iso)
+  =>
     _self_pk = pk
     _self_sk = sk
     _target_pk = other_pk
+    _registry = None
     _shs = consume ref shs
 
-    fun ref connect_failed(conn: TCPConnection ref) =>
-      Debug.out("_SHSNotify closed")
+  fun ref connect_failed(conn: TCPConnection ref) =>
+    Debug.out("_SHSNotify closed")
 
-    fun ref closed(conn: TCPConnection ref) =>
-      Debug.out("_SHSNotify closed")
+  fun ref closed(conn: TCPConnection ref) =>
+    Debug.out("_SHSNotify closed")
 
   fun ref accepted(conn: TCPConnection ref) =>
     match _shs
     | let c: HandshakeClient => None
     | let s: HandshakeServer =>
-      // Create ephemeral keys on connection
       try
+        // Create ephemeral keys on connection
         conn.expect(s.init()?)?
+        // Register connection in the registry
+        (_registry as Custodian).apply(recover tag conn end)
       else
         Debug.err("_SHSNotify/server couldn't init")
         conn.close()
@@ -106,9 +122,11 @@ class iso _SHSNotify is TCPConnectionNotify
 class _SHSListenNotify is TCPListenNotify
   let _pk: Ed25519Public
   let _sk: Ed25519Secret
+  let _registry: Custodian
 
-  new iso create(pk: Ed25519Public, sk: Ed25519Secret) =>
+  new iso create(pk: Ed25519Public, sk: Ed25519Secret, registry: Custodian) =>
     (_pk, _sk) = (pk, sk)
+    _registry = registry
 
   fun ref listening(listen: TCPListener ref) =>
     try
@@ -118,7 +136,7 @@ class _SHSListenNotify is TCPListenNotify
 
   fun ref connected(listen: TCPListener ref): TCPConnectionNotify iso^ =>
     Debug.out("_SHSListenNotify connected")
-    _SHSNotify.server(_pk, _sk, HandshakeServer(_pk, _sk, DefaultNetworkId()))
+    _SHSNotify.server(_pk, _sk, _registry, HandshakeServer(_pk, _sk, DefaultNetworkId()))
 
   fun ref not_listening(listen: TCPListener ref) =>
     Debug.err("_SHSListenNotify not_listening")
@@ -129,10 +147,11 @@ primitive Handshake
     auth: AmbientAuth,
     pk: Ed25519Public,
     sk: Ed25519Secret,
-    port: String)
+    port: String,
+    registry: Custodian)
     : TCPListener
   =>
-    TCPListener(NetAuth(auth), _SHSListenNotify(pk, sk), "", port)
+    TCPListener(NetAuth(auth), _SHSListenNotify(pk, sk, registry), "", port)
 
   fun client(
     auth: AmbientAuth,
@@ -141,7 +160,7 @@ primitive Handshake
     target_pk: Ed25519Public,
     target_ip: String,
     target_port: String)
-    : None
+    : TCPConnection
   =>
 
     let notify = _SHSNotify.client(
