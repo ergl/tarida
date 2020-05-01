@@ -1,10 +1,9 @@
 use "sodium"
-use "net"
 use "debug"
 
 actor Main
   fun tag _enable_discovery(
-    auth: NetAuth,
+    auth: AmbientAuth,
     self_pk: Ed25519Public,
     addr: String,
     peer_port: String)
@@ -14,7 +13,7 @@ actor Main
     Discovery(auth, consume encoded_id, addr, port, peer_port)
 
   fun tag _enable_server_mode(
-    auth: NetAuth,
+    auth: AmbientAuth,
     self_pk: Ed25519Public,
     self_sk: Ed25519Secret,
     peering_port: String,
@@ -36,21 +35,26 @@ actor Main
       Debug.out("Invites should supply: " + Identity.cypherlink(inv_pub))
     end
 
-    PeerServer(auth, self_pk, self_sk, peering_port)
+    Handshake.server(auth, self_pk, self_sk, peering_port)
 
   fun _enable_client_mode(
-    auth: NetAuth,
+    auth: AmbientAuth,
     self_pk: Ed25519Public,
     self_sk: Ed25519Secret,
     config: ClientConfig)?
   =>
-    error
+    let other_pk_bytes = Identity.decode_cypherlink(config.target_pk)?
+    let other_pk = Sodium.ed25519_pk_from_bytes(other_pk_bytes)?
+    let other_ip = config.target_ip
+    let other_port = config.target_port
+
+    Handshake.client(auth, self_pk, self_sk, other_pk, other_ip, other_port)
 
   new create(env: Env) =>
     try
       // TODO(borja): Read identity from config.config_path
       Sodium.init()?
-      let auth = NetAuth(env.root as AmbientAuth)
+      let auth = env.root as AmbientAuth
       (let public, let secret) = Identity.generate()?
 
       let config = ArgConfig(env)?

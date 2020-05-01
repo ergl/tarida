@@ -6,7 +6,7 @@ primitive _ClientAuth
 primitive _ServerDone
 type _ServerFSM is (_ClientHello | _ClientAuth | _ServerDone)
 
-class iso HandshakeServer
+class HandshakeServer
   let _network_id: Array[U8] val
 
   var _state: _ServerFSM
