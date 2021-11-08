@@ -52,7 +52,10 @@ class iso BoxStream
     let header = recover [as U8: (msg_size >> 8).u8(); msg_size.u8()].>append(auth_tag) end
     let enc_header = Sodium.box_easy(consume header, _enc_key.string(), header_nonce)?
 
-    packet.>append(enc_header).>append(enc_body)
+    // TODO(borja): Work around type checker bug
+    packet.append(enc_header)
+    packet.append(enc_body)
+    packet
 
   fun ref decrypt_header(msg: String): ((USize, String) | None)? =>
     let header_nonce = _dec_nonce.as_nonce(); _dec_nonce.next()

@@ -1,5 +1,9 @@
-use "path:/usr/local/opt/libsodium/lib" if osx
+use "path:/usr/local/opt/libsodium/lib" if osx and x86
+use "path:/opt/homebrew/opt/libsodium/lib" if osx and arm
 use "lib:sodium"
+
+use @pony_ctx[Pointer[None] iso]()
+use @pony_alloc[Pointer[U8]](ctx: Pointer[None] iso, len: USize)
 
 use @sodium_init[I32]()
 use @crypto_sign_publickeybytes[USize]()
@@ -112,10 +116,7 @@ class val Curve25519Secret is _OpaqueBuffer
 primitive Sodium
   fun _make_buffer(len: USize): Array[U8] iso^ =>
     recover
-      Array[U8].from_cpointer(
-        @pony_alloc[Pointer[U8]](@pony_ctx[Pointer[None] iso](), len),
-        len
-        )
+      Array[U8].from_cpointer(@pony_alloc(@pony_ctx(), len), len)
     end
 
   // FIXME(borja): Maybe return a capability from this
