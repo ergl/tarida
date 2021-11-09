@@ -1,4 +1,5 @@
 use "cli"
+use logger = "logger"
 
 class val InviteConfig
   var self_ip: String = ""
@@ -16,6 +17,7 @@ class val ClientConfig
   var self_port: String = ""
 
 class val TaridaConfig
+  var log_level: logger.LogLevel = logger.Error
   var config_path: String = ""
   var enable_discovery: Bool = false
   var enable_autoconnect: Bool = false
@@ -25,6 +27,15 @@ primitive ArgConfig
   fun apply(env: Env): TaridaConfig? =>
     let cmd = _parse(env)?
     let config = TaridaConfig
+
+    config.log_level =
+      match cmd.option("log").u64()
+      | 0 => logger.Error
+      | 1 => logger.Warn
+      | 2 => logger.Info
+      else
+        logger.Fine
+      end
 
     config.config_path = cmd.option("id_path").string()
     config.enable_discovery = cmd.option("broadcast").bool()
@@ -71,8 +82,8 @@ primitive ArgConfig
     : ServerConfig val
   =>
     let server_config = ServerConfig
-    server_config.self_ip = cmd.arg("self_ip").string()
-    server_config.self_port = cmd.arg("self_port").string()
+    server_config.self_ip = cmd.option("ip").string()
+    server_config.self_port = cmd.option("port").string()
     server_config
 
   fun _parse_geninvite_config(
@@ -81,8 +92,8 @@ primitive ArgConfig
     : InviteConfig val
   =>
     let invite_config = InviteConfig
-    invite_config.self_ip = cmd.arg("self_ip").string()
-    invite_config.self_port = cmd.arg("self_port").string()
+    invite_config.self_ip = cmd.option("ip").string()
+    invite_config.self_port = cmd.option("port").string()
     invite_config
 
   fun _parse(env: Env): Command? =>
@@ -109,8 +120,8 @@ primitive ArgConfig
       "A work-in-progress SSB implementation",
       [
         OptionSpec.u64(
-          "debug",
-          "Configure debug output: 0=err, 1=warn, 2=info, 3=fine."
+          "log",
+          "Configure log output: 0=err, 1=warn, 2=info, 3=fine."
           where short' = 'g',
           default' = 0)
 

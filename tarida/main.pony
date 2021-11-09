@@ -1,4 +1,5 @@
 use "debug"
+use "logger"
 use "signals"
 use "bureaucracy"
 
@@ -21,6 +22,8 @@ actor Main
       (let public, let secret) = Identity.generate()?
 
       let config = ArgConfig(env)?
+      let logger = StringLogger(config.log_level, env.out)
+
       let connection_custodian = Custodian
         let autoconn_custodian =
           if config.enable_autoconnect then
