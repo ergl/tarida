@@ -29,9 +29,9 @@ Disclaimer: I've only been hacking on tarida in my free time, so I haven't put a
 
 Tarida only works on OSX for now, although only for the lack of effort. Tarida depends on `libsodium` for the secret handshake protocol. To build tarida, first install libsodium, the [Pony](https://github.com/ponylang/ponyc/blob/295f65cb2330606c4f0697bfdf20aa51e61034cf/INSTALL.md) compiler, and the [`corral`](https://github.com/ponylang/corral) dependency manager.
 
-After cloning the repo, download the dependencies with `corral fetch`, and then `make`. To run it, do `./_build/tarida`. A debug version can be built with `make debug`, and executed with `./_build/debug_tarida`.
+After cloning the repo, download the dependencies with `corral fetch`, and then `make`. To run it, do `./build/release/tarida`. A debug version can be built with `make config=debug`, and executed with `./build/debug/tarida`.
 
-The tests can be run with `make tests`. Integration tests for the secret handshake protocol can be built with `make integration`. This will build a `shs_tarida` binary under the `_build` folder that you can use with [`shs1-test`](https://github.com/AljoschaMeyer/shs1-test) to run the tests.
+The tests can be run with `make tests`. Integration tests for the secret handshake protocol can be built with `make integration`. This will build a `shs_tarida` binary under the `build` folder that you can use with [`shs1-test`](https://github.com/AljoschaMeyer/shs1-test) to run the tests.
 
 ## Why Tarida?
 
