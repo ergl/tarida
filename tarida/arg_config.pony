@@ -1,65 +1,89 @@
 use "cli"
 
+class val InviteConfig
+  var self_ip: String = ""
+  var self_port: String = ""
+
 class val ServerConfig
-  var is_pub: Bool = false
-  var pub_domain: String = ""
-  var pub_port: String = ""
+  var self_ip: String = ""
+  var self_port: String = ""
 
 class val ClientConfig
-  var target_pk: String = ""
-  var target_ip: String = ""
-  var target_port: String = ""
+  var server_pk: String = ""
+  var server_ip: String = ""
+  var server_port: String = ""
+  var self_ip: String = ""
+  var self_port: String = ""
 
 class val TaridaConfig
   var config_path: String = ""
   var enable_discovery: Bool = false
   var enable_autoconnect: Bool = false
-  var peering_port: String = "9999"
-  var local_broadcast_ip: String = ""
-  var mode_config : (ServerConfig | ClientConfig) = ServerConfig
+  var mode_config : (ServerConfig | ClientConfig | InviteConfig) = ServerConfig
 
 primitive ArgConfig
-  fun _client_spec(): CommandSpec? =>
-    CommandSpec.leaf(
-      "client",
-      "start tarida in client mode",
-      [ OptionSpec.string("target_pk", "The peer public key")
-        OptionSpec.string("target_ip", "The peer IP address")
-        OptionSpec.string("target_port", "The peer port") ]
-    )?.>add_help()?
+  fun apply(env: Env): TaridaConfig? =>
+    let cmd = _parse(env)?
+    let config = TaridaConfig
 
-  fun _server_spec(): CommandSpec? =>
-    CommandSpec.leaf(
-      "server",
-      "start tarida in server mode",
-      [ OptionSpec.bool(
-        "pub",
-        "Turn this server into a pub"
-        where short' = 'p', default' = false) ],
-      [ ArgSpec.string("pub_domain", "Public pub domain", "")
-        ArgSpec.string("pub_port", "Public pub port", "") ]
-    )?.>add_help()?
+    config.config_path = cmd.option("id_path").string()
+    config.enable_discovery = cmd.option("broadcast").bool()
+    config.enable_autoconnect = cmd.option("autoconnect").bool()
 
-  fun _spec(): CommandSpec? =>
-    CommandSpec.parent(
-      "tarida",
-      "WIP SSB implementation",
-      [ OptionSpec.string("broadcast",
-                          "Tells tarida the IP used to broadcast to peers locally",
-                          'b')
+    config.mode_config =
+      match cmd.fullname()
+      | "tarida/client" => _parse_client_config(env, cmd)?
+      | "tarida/server" => _parse_server_config(env, cmd)
+      | "tarida/gen_invite" => _parse_geninvite_config(env, cmd)
+      else
+        // Can't happen, since _parse will do it for us, but you never know
+        env.err.print("Error: bad command " + cmd.fullname())
+        env.exitcode(1)
+        error
+      end
 
-        OptionSpec.bool("autoconnect",
-                        "Autoconnect to local announcements"
-                        where default' = false)
+    config
 
-        OptionSpec.string("id_path",
-                          "Tells tarida where to find the configuration file",
-                          'f')
+  fun _parse_client_config(
+    env: Env,
+    cmd: Command)
+    : ClientConfig val
+    ?
+  =>
+    let client_config = ClientConfig
+    client_config.server_pk = cmd.option("server_pk").string()
+    client_config.server_ip = cmd.option("server_ip").string()
+    client_config.server_port = cmd.option("server_port").string()
+    client_config.self_ip = cmd.option("self_ip").string()
+    client_config.self_port = cmd.option("self_port").string()
 
-        OptionSpec.string("peer_port", "Peering TCP port"
-                          where short' = 't', default' = "9999") ],
-      [ _server_spec()?; _client_spec()? ]
-    )?.>add_help()?
+    if client_config.server_pk.size() == 0 then
+      env.err.print("Error: need the public key of the server")
+      env.exitcode(1)
+      error
+    end
+
+    client_config
+
+  fun _parse_server_config(
+    env: Env,
+    cmd: Command)
+    : ServerConfig val
+  =>
+    let server_config = ServerConfig
+    server_config.self_ip = cmd.arg("self_ip").string()
+    server_config.self_port = cmd.arg("self_port").string()
+    server_config
+
+  fun _parse_geninvite_config(
+    env: Env,
+    cmd: Command)
+    : InviteConfig val
+  =>
+    let invite_config = InviteConfig
+    invite_config.self_ip = cmd.arg("self_ip").string()
+    invite_config.self_port = cmd.arg("self_port").string()
+    invite_config
 
   fun _parse(env: Env): Command? =>
     let spec = _spec()?
@@ -79,63 +103,101 @@ primitive ArgConfig
       error
     end
 
-  fun _fill_client_config(env: Env, config: TaridaConfig iso, cmd: Command): TaridaConfig? =>
-    let client_config = ClientConfig
-    let target_pk = cmd.option("target_pk").string()
-    let target_ip = cmd.option("target_ip").string()
-    let target_port = cmd.option("target_port").string()
+  fun _spec(): CommandSpec? =>
+    CommandSpec.parent(
+      "tarida",
+      "A work-in-progress SSB implementation",
+      [
+        OptionSpec.u64(
+          "debug",
+          "Configure debug output: 0=err, 1=warn, 2=info, 3=fine."
+          where short' = 'g',
+          default' = 0)
 
-    if (target_pk.size() == 0) or (target_port.size() == 0) then
-      env.err.print("Error: no real data supplied")
-      env.exitcode(1)
-      error
-    end
+        OptionSpec.string(
+          "id_path",
+          "Path to identity configuration file"
+          where short' = 'f')
 
-    client_config.target_pk = target_pk
-    client_config.target_ip = target_ip
-    client_config.target_port = target_port
-    config.mode_config = consume client_config
-    config
+        OptionSpec.bool(
+          "broadcast",
+          "Enable local UDP broadcast"
+          where short' = 'b',
+          default' = false)
 
-  fun _fill_server_config(env: Env, config: TaridaConfig iso, cmd: Command): TaridaConfig? =>
-    let server_config = ServerConfig
-    server_config.is_pub = cmd.option("pub").bool()
-    if server_config.is_pub then
-      let pub_domain = cmd.arg("pub_domain").string()
-      let pub_port = cmd.arg("pub_port").string()
-      if (pub_domain.size() == 0) or (pub_port.size() == 0) then
-        env.err.print("Error: server is pub, but no domain or port was given")
-        env.exitcode(1)
-        error
-      end
+        OptionSpec.bool(
+          "broadcast_autoconnect",
+          "Attempt to utoconnect to received local announcements"
+          where default' = false)
+      ],
+      [
+        _server_command()?
+        _client_command()?
+        _gen_invite_command()?
+      ]
+    )?
+    .>add_help()?
 
-      server_config.pub_domain = pub_domain
-      server_config.pub_port = pub_port
-    end
+  fun _server_command(): CommandSpec? =>
+    CommandSpec.leaf(
+      "server",
+      "start tarida in server mode",
+      [
+        OptionSpec.string(
+          "ip",
+          "The IP address of this server"
+          where default' = "")
 
-    config.mode_config = consume server_config
-    config
+        OptionSpec.string(
+          "port",
+          "The port of this server"
+          where default' = "9999")
+      ],
+      []
+    )?
+    .>add_help()?
 
-  fun apply(env: Env): TaridaConfig? =>
-    let cmd = _parse(env)?
-    let config = TaridaConfig
+  fun _client_command(): CommandSpec? =>
+    CommandSpec.leaf(
+      "client",
+      "start tarida in client mode",
+      [
+        OptionSpec.string("server_pk", "The server's public key")
 
-    config.config_path = cmd.option("id_path").string()
-    config.local_broadcast_ip = cmd.option("broadcast").string()
-    // FIXME(borja): Default values are being ignored
-    let got_peering_port = cmd.option("peer_port").string()
-    if got_peering_port.size() != 0 then
-      config.peering_port = got_peering_port
-    end
+        OptionSpec.string("server_ip", "Server IP address")
 
-    config.enable_discovery = (config.local_broadcast_ip != "")
-    config.enable_autoconnect = cmd.option("autoconnect").bool()
-    match cmd.fullname()
-    | "tarida/client" => _fill_client_config(env, consume config, cmd)?
-    | "tarida/server" => _fill_server_config(env, consume config, cmd)?
-    else
-      // Can't happen, since _parse will do it for us, but you never know
-      env.err.print("Error: bad command " + cmd.fullname())
-      env.exitcode(1)
-      error
-    end
+        OptionSpec.string(
+          "server_port",
+          "Server port"
+          where default' = "9999")
+
+        OptionSpec.string(
+          "self_ip",
+          "Client IP address"
+          where default' = "")
+
+        OptionSpec.string(
+          "self_port",
+          "Client port"
+          where default' = "")
+      ]
+    )?
+    .>add_help()?
+
+  fun _gen_invite_command(): CommandSpec? =>
+    CommandSpec.leaf(
+      "gen_invite",
+      "generate a pub invitation",
+      [
+        OptionSpec.string(
+          "ip",
+          "The IP address of this server"
+          where default' = "")
+
+        OptionSpec.string(
+          "port",
+          "The port of this server"
+          where default' = "9999")
+      ]
+    )?
+    .>add_help()?
