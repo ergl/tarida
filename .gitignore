@@ -1,4 +1,9 @@
-_build/
-_corral/
-_repos/
+/build/*
+TAGS
+tags
+/.deps/*
+/.coverage/
+/_corral/
+/_repos/
 *~
+.DS_Store
