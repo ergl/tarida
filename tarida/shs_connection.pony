@@ -119,40 +119,7 @@ class iso _SHSNotify is TCPConnectionNotify
 
     true
 
-class _SHSListenNotify is TCPListenNotify
-  let _pk: Ed25519Public
-  let _sk: Ed25519Secret
-  let _registry: Custodian
-
-  new iso create(pk: Ed25519Public, sk: Ed25519Secret, registry: Custodian) =>
-    (_pk, _sk) = (pk, sk)
-    _registry = registry
-
-  fun ref listening(listen: TCPListener ref) =>
-    try
-      (let addr, let port) = listen.local_address().name()?
-      Debug.out("_SHSListenNotify listening on " + addr + ":" + port)
-    end
-
-  fun ref connected(listen: TCPListener ref): TCPConnectionNotify iso^ =>
-    Debug.out("_SHSListenNotify connected")
-    _SHSNotify.server(_pk, _sk, _registry, HandshakeServer(_pk, _sk, DefaultNetworkId()))
-
-  fun ref not_listening(listen: TCPListener ref) =>
-    Debug.err("_SHSListenNotify not_listening")
-    None
-
 primitive Handshake
-  fun server(
-    auth: AmbientAuth,
-    pk: Ed25519Public,
-    sk: Ed25519Secret,
-    port: String,
-    registry: Custodian)
-    : TCPListener
-  =>
-    TCPListener(NetAuth(auth), _SHSListenNotify(pk, sk, registry), "", port)
-
   fun client(
     auth: AmbientAuth,
     pk: Ed25519Public,
