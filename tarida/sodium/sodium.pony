@@ -1,11 +1,6 @@
-use "path:/usr/local/opt/libsodium/lib" if osx and x86
-use "path:/opt/homebrew/opt/libsodium/lib" if osx and arm
-use "lib:sodium"
-
 use @pony_ctx[Pointer[None] iso]()
 use @pony_alloc[Pointer[U8]](ctx: Pointer[None] iso, len: USize)
 
-use @sodium_init[I32]()
 use @crypto_sign_publickeybytes[USize]()
 use @crypto_sign_secretkeybytes[USize]()
 use @crypto_sign_seedbytes[USize]()
@@ -117,15 +112,6 @@ primitive Sodium
   fun _make_buffer(len: USize): Array[U8] iso^ =>
     recover
       Array[U8].from_cpointer(@pony_alloc(@pony_ctx(), len), len)
-    end
-
-  // FIXME(borja): Maybe return a capability from this
-  // Since Sodium shouldn't be used without calling init first, we could
-  // return a capability here, and require it as an argument for every call,
-  // so we never forget to call it.
-  fun init()? =>
-    if \unlikely\ @sodium_init() == -1 then
-      error
     end
 
   fun ed25519_pair(): (Ed25519Public, Ed25519Secret)? =>

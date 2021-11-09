@@ -51,7 +51,6 @@ type Exit is {(I32)} val
 actor Main
   new create(env: Env) =>
     try
-      Sodium.init()?
       let config = Config(env)?
       let signal = SignalHandler(SigTermHandler(env.input), Sig.term())
       let notify = match config

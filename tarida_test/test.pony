@@ -119,7 +119,6 @@ class iso _TestCypherLinkProperty is Property1[Array[U8] iso]
 
   fun property(bytes': Array[U8] iso, ph: PropertyHelper) =>
     try
-      Sodium.init()?
       let bytes = consume val bytes'
       let public_key = Sodium.ed25519_pk_from_bytes(bytes)?
       let cypherlink = tarida.Identity.cypherlink(public_key)

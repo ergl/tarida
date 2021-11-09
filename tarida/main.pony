@@ -68,7 +68,6 @@ actor Main
   new create(env: Env) =>
     try
       // TODO(borja): Read identity from config.config_path
-      Sodium.init()?
       let auth = env.root as AmbientAuth
       (let public, let secret) = Identity.generate()?
 
