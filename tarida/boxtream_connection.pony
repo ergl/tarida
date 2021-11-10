@@ -1,5 +1,6 @@
 use "shs"
 use "sodium"
+use "identity"
 
 use "net"
 use "debug"

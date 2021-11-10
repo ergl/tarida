@@ -1,4 +1,5 @@
-use "sodium"
+use "../sodium"
+
 use "encode/base64"
 
 primitive Identity

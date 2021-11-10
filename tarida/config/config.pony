@@ -5,6 +5,9 @@ class val InviteConfig
   var self_ip: String = ""
   var self_port: String = ""
 
+class val GenIdentityConfig
+  var identity_path: String = ""
+
 class val ServerConfig
   var self_ip: String = ""
   var self_port: String = ""
@@ -16,17 +19,20 @@ class val ClientConfig
   var self_ip: String = ""
   var self_port: String = ""
 
-class val TaridaConfig
+class val Config
   var log_level: logger.LogLevel = logger.Error
   var config_path: String = ""
   var enable_discovery: Bool = false
   var enable_autoconnect: Bool = false
-  var mode_config : (ServerConfig | ClientConfig | InviteConfig) = ServerConfig
+  var mode_config: (ServerConfig
+    | ClientConfig
+    | InviteConfig
+    | GenIdentityConfig) = ServerConfig
 
-primitive ArgConfig
-  fun apply(env: Env): TaridaConfig? =>
+primitive ParseArgs
+  fun apply(env: Env): Config? =>
     let cmd = _parse(env)?
-    let config = TaridaConfig
+    let config = Config
 
     config.log_level =
       match cmd.option("log").u64()
@@ -46,6 +52,7 @@ primitive ArgConfig
       | "tarida/client" => _parse_client_config(env, cmd)?
       | "tarida/server" => _parse_server_config(env, cmd)
       | "tarida/gen_invite" => _parse_geninvite_config(env, cmd)
+      | "tarida/gen_identity" => _parse_genidentity_config(env, cmd)?
       else
         // Can't happen, since _parse will do it for us, but you never know
         env.err.print("Error: bad command " + cmd.fullname())
@@ -96,6 +103,22 @@ primitive ArgConfig
     invite_config.self_port = cmd.option("port").string()
     invite_config
 
+  fun _parse_genidentity_config(
+    env: Env,
+    cmd: Command)
+    : GenIdentityConfig val
+    ?
+  =>
+    let config = GenIdentityConfig
+    config.identity_path = cmd.option("path").string()
+    if config.identity_path.size() == 0 then
+      env.err.print("Error: need a destination path to save the identity")
+      env.exitcode(1)
+      error
+    end
+
+    config
+
   fun _parse(env: Env): Command? =>
     let spec = _spec()?
     match CommandParser(spec).parse(env.args)
@@ -145,6 +168,7 @@ primitive ArgConfig
         _server_command()?
         _client_command()?
         _gen_invite_command()?
+        _gen_identity_command()?
       ]
     )?
     .>add_help()?
@@ -212,3 +236,15 @@ primitive ArgConfig
       ]
     )?
     .>add_help()?
+
+  fun _gen_identity_command(): CommandSpec? =>
+    CommandSpec.leaf(
+      "gen_identity",
+      "generate a stable identity",
+      [
+        OptionSpec.string(
+          "path",
+          "The path where you want to store your identity"
+          where short' = 'f')
+      ])?
+      .>add_help()?

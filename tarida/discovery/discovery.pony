@@ -3,14 +3,15 @@
 // - An UDP client listening on the private IP:XXX, sending advertisements
 // The above client needs to advertise our TCP server, listening on 0.0.0.0:XXX
 
+use "../sodium"
+use "../identity"
+
 use "net"
 use "time"
 use "regex"
 use "debug"
 use "collections"
 use "bureaucracy"
-
-use "sodium"
 
 class iso _BroadcastSenderTimer is TimerNotify
   let _discovery: Discovery
@@ -187,23 +188,23 @@ actor Discovery
                 + "~"
                 + peer_pub)
 
-      match _connection_custodian
-      | None => None
-      | let c: Custodian =>
-          Debug.out("Discovery: autoconnect to " + peer_pub)
-          // Autoconnect is enabled
-          let conn = Handshake.client(
-            _auth,
-            _self_pk,
-            _self_sk,
-            Identity.decode(peer_pub)?,
-            peer_ip,
-            peer_port
-          )
+      // match _connection_custodian
+      // | None => None
+      // | let c: Custodian =>
+      //     Debug.out("Discovery: autoconnect to " + peer_pub)
+      //     // Autoconnect is enabled
+      //     let conn = Handshake.client(
+      //       _auth,
+      //       _self_pk,
+      //       _self_sk,
+      //       Identity.decode(peer_pub)?,
+      //       peer_ip,
+      //       peer_port
+      //     )
 
-          // Register connection
-          c.apply(conn)
-      end
+      //     // Register connection
+      //     c.apply(conn)
+      // end
 
       _found_peers.set(peer_pub)
     end

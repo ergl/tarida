@@ -3,6 +3,7 @@ use "package:.."
 use "package:../.."
 use "package:../../rpc"
 use "package:../../ssbjson"
+use "package:../../identity"
 
 actor LegacyInviteHandler is Handler
   be handle_init(conn: RPCConnection) => None // TODO
@@ -42,4 +43,3 @@ actor LegacyInviteHandler is Handler
     end
 
     conn.write(consume reply)
-
