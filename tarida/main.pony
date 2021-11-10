@@ -15,14 +15,11 @@ actor Main
       match config.mode_config
       | let i: InviteConfig =>
         CmdInvite(logger, auth, config)
-      // | let id: GenIdentityConfig =>
-      //   CmdGenIdentity(logger, auth, config)
+      | let id: GenIdentityConfig =>
+        CmdIdentity(logger, auth, config)
       | let server: ServerConfig =>
         CmdServer(logger, auth, config)
       | let client: ClientConfig =>
         CmdClient(logger, auth, config)
-      else
-        logger(Error) and logger.log("Mode not supported")
-        error
       end
     end

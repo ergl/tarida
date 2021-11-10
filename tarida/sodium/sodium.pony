@@ -87,11 +87,25 @@ interface val _OpaqueBuffer
   fun size(): USize => _get_inner().size()
   fun string(): String => String.from_array(_get_inner())
 
-class val Ed25519Public is _OpaqueBuffer
+class val Ed25519Public is (_OpaqueBuffer & Equatable[Ed25519Public])
   let _inner: Array[U8] val
   new val create(from: Array[U8] iso) => _inner = consume from
   new val from_string(from: String) => _inner = from.array()
   fun _get_inner(): Array[U8] val => _inner
+  fun eq(that: box->Ed25519Public): Bool =>
+    if _inner.size() != that._inner.size() then
+      return false
+    end
+    for (idx, byte) in _inner.pairs() do
+      try
+        if byte != that._inner(idx)? then
+          return false
+        end
+      else
+        return false
+      end
+    end
+    true
 
 class val Ed25519Secret is _OpaqueBuffer
   let _inner: Array[U8] val
@@ -147,6 +161,20 @@ primitive Sodium
     end
     pk.copy_from(bytes, 0, 0, public_size)
     Ed25519Public(consume pk)
+
+  fun ed25519_sk_from_bytes(byte_seq: ByteSeq): Ed25519Secret? =>
+    let secret_size = @crypto_sign_secretkeybytes()
+    if byte_seq.size() != secret_size then
+      error
+    end
+
+    let pk = _make_buffer(secret_size)
+    let bytes = match byte_seq
+    | let s: String => s.array()
+    | let a: Array[U8] val => a
+    end
+    pk.copy_from(bytes, 0, 0, secret_size)
+    Ed25519Secret(consume pk)
 
   fun ed25519_pair_sk_to_pk(sk: Ed25519Secret): Ed25519Public? =>
     let pk = _make_buffer(@crypto_sign_publickeybytes())
