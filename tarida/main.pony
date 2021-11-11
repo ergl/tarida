@@ -6,7 +6,6 @@ use "logger"
 actor Main
   new create(env: Env) =>
     try
-      // TODO(borja): Read identity from config.config_path
       let auth = env.root as AmbientAuth
 
       let config = ParseArgs(env)?

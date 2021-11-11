@@ -2,6 +2,9 @@ use "../config"
 use "../discovery"
 use "../sodium"
 use "../identity"
+use "../handlers"
+use "../shs"
+use "../boxstream"
 
 use "bureaucracy"
 use "files"
@@ -42,14 +45,36 @@ class CmdClient
           self_config.self_port, autoconn_custodian)
       end
 
+      logger(Info) and logger.log("About to decode: " + self_config.server_pk)
       let server_pk_bytes = Identity.decode_cypherlink(self_config.server_pk)?
+      logger(Info) and logger.log("Was able to decode cypherlink")
       let server_pk = Sodium.ed25519_pk_from_bytes(server_pk_bytes)?
 
-      // custodian(Handshake.client(auth, public, secret, server_pk,
-      //   self_config.self_ip, self_config.self_port))
+      logger(Info) and logger.log("Got server public key")
 
-      // _RegisterHandler.apply(custodian)
+      let conn = TCPConnection(
+        NetAuth(auth),
+        BoxStreamConnection.client(
+          logger,
+          RPCNotify(RPCConnectionServer(
+            logger,
+            public,
+            secret
+          )),
+          public,
+          secret,
+          server_pk,
+          DefaultNetworkId()
+        ),
+        self_config.server_ip,
+        self_config.server_port,
+        self_config.self_ip
+      )
+
+      custodian(conn)
+
+      _RegisterHandler.apply(custodian)
     else
-      logger(Error) and logger.log("Couldn't start server")
+      logger(Error) and logger.log("Couldn't start client")
     end
 

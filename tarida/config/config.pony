@@ -186,9 +186,14 @@ primitive ParseArgs
       "client",
       "start tarida in client mode",
       [
-        OptionSpec.string("server_pk", "The server's public key")
+        OptionSpec.string(
+          "server_pk",
+          "The server's public key")
 
-        OptionSpec.string("server_ip", "Server IP address")
+        OptionSpec.string(
+          "server_ip",
+          "Server IP address"
+          where default' = "")
 
         OptionSpec.string(
           "server_port",
@@ -203,7 +208,7 @@ primitive ParseArgs
         OptionSpec.string(
           "self_port",
           "Client port"
-          where default' = "")
+          where default' = "9999")
       ]
     )?
     .>add_help()?
