@@ -6,36 +6,25 @@ use "files"
 use "logger"
 use "json"
 
-class CmdIdentity is CmdType
+class CmdIdentity
   fun apply(
     logger: Logger[String val],
     auth: AmbientAuth,
-    config: Config)
+    config: Config,
+    self_config: GenIdentityConfig)
   =>
+    let path = config.identity_path
     try
-      let self_config = config.mode_config as GenIdentityConfig
-      let config_path = self_config.identity_path
-      let filepath = FilePath(auth, config_path)
-
-      if not filepath.exists() then
-        let dirpath = FilePath(auth, Path.dir(config_path))
-        if not dirpath.exists() and not dirpath.mkdir() then
-          logger(Error) and logger.log("Couldn't create identity path " +
-            config_path)
-        end
-      end
-
-      match CreateFile(filepath)
-      | let file: File if file.size() == 0 =>
+      let file = IdentityFile(FileAuth(auth), path)?
+      if file.size() == 0 then
         try _make_identity(logger, file)? end
-        file.dispose()
-      | let existing: File =>
-        try _show_identity(logger, existing)? end
-        existing.dispose()
       else
-        logger(Error) and logger.log("Error while opening path " +
-          self_config.identity_path)
+        try _show_identity(logger, file)? end
       end
+      file.dispose()
+    else
+      logger(Error) and
+        logger.log("Couldn't create identity file " + path)
     end
 
   fun _make_identity(logger: Logger[String] val, file: File ref)? =>

@@ -6,22 +6,32 @@ use "../shs"
 use "../identity"
 
 use "bureaucracy"
+use "files"
 use "logger"
 use "net"
 use "signals"
 
-class CmdServer is CmdType
+class CmdServer
   fun ref apply(
     logger: Logger[String val],
     auth: AmbientAuth,
-    config: Config)
+    config: Config,
+    self_config: ServerConfig)
   =>
-
     try
-      let self_config = config.mode_config as ServerConfig
+      let identity = try
+        Identity.from_path(FileAuth(auth), config.identity_path)?
+      else
+        None
+      end
 
-      // TODO(borja): Read identity from config.config_path
-      (let public, let secret) = Identity.generate()?
+      if identity is None then
+        logger(Error) and
+          logger.log("Couldn't read identity " + config.identity_path)
+        return
+      end
+
+      (let public, let secret) = identity as (Ed25519Public, Ed25519Secret)
       let custodian = Custodian
       let autoconn_custodian = if config.enable_autoconnect then
         custodian

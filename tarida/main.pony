@@ -13,13 +13,13 @@ actor Main
       let logger = StringLogger(config.log_level, env.out)
 
       match config.mode_config
-      | let i: InviteConfig =>
-        CmdInvite(logger, auth, config)
-      | let id: GenIdentityConfig =>
-        CmdIdentity(logger, auth, config)
+      | let invite: InviteConfig =>
+        CmdInvite(logger, auth, config, invite)
+      | let identity: GenIdentityConfig =>
+        CmdIdentity(logger, auth, config, identity)
       | let server: ServerConfig =>
-        CmdServer(logger, auth, config)
+        CmdServer(logger, auth, config, server)
       | let client: ClientConfig =>
-        CmdClient(logger, auth, config)
+        CmdClient(logger, auth, config, client)
       end
     end

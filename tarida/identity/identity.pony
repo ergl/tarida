@@ -4,9 +4,31 @@ use "files"
 use "encode/base64"
 use "json"
 
+primitive IdentityFile
+  fun apply(auth: FileAuth, path: String): File? =>
+    let filepath = FilePath(auth, path)
+    if not filepath.exists() then
+      let dirpath = FilePath(auth, Path.dir(path))
+      if not dirpath.exists() and not dirpath.mkdir() then
+        error
+      end
+    end
+
+   CreateFile(filepath) as File
+
+ fun read(auth: FileAuth, path: String): File? =>
+    OpenFile(FilePath(auth, path)) as File
+
 primitive Identity
   fun generate(): (Ed25519Public, Ed25519Secret)? =>
     Sodium.ed25519_pair()?
+
+  fun from_path(auth: FileAuth, path: String): (Ed25519Public, Ed25519Secret)? =>
+    with file = IdentityFile.read(auth, path)? do
+      from_file(file)?
+    else
+      error
+    end
 
   fun from_file(file: File): (Ed25519Public, Ed25519Secret)? =>
     let contents = file.read_string(file.size())
