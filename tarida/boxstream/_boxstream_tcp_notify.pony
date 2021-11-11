@@ -1,9 +1,8 @@
-use "shs"
-use "sodium"
-use "identity"
+use "../shs"
+use "../sodium"
 
+use "logger"
 use "net"
-use "debug"
 
 primitive _BoxStreamExpectHeader
 class val _BoxStreamExpectBody
@@ -11,37 +10,41 @@ class val _BoxStreamExpectBody
   new val create(other_tag: String) =>
     auth_tag = other_tag
 
-type _BoxStreamNotifyState is (_BoxStreamExpectHeader | _BoxStreamExpectBody)
-class _BoxStreamNotify is TCPConnectionNotify
-  let _socket: TCPConnection
-
-  let _notify: RPCConnectionServer
+type _BoxStreamTCPNotifyState is (_BoxStreamExpectHeader | _BoxStreamExpectBody)
+class _BoxStreamTCPNotify is TCPConnectionNotify
+  let _logger: Logger[String val]
+  var _notify: BoxStreamNotify ref
+  var _notify_called: USize = 0
 
   let _boxstream: BoxStream
-  var _state: _BoxStreamNotifyState
+  var _state: _BoxStreamTCPNotifyState
 
-  new iso create(
-    socket: TCPConnection,
-    self_pk: Ed25519Public,
-    self_sk: Ed25519Secret,
-    remote_pk: Ed25519Public,
-    boxtream: BoxStream iso)
+  new iso _create(
+    logger: Logger[String] val,
+    notify: BoxStreamNotify,
+    boxtream: BoxStream iso,
+    conn: TCPConnection,
+    peer_pk: Ed25519Public)
   =>
+    _logger = logger
+    _notify = consume ref notify
+
     _boxstream = consume boxtream
     _state = _BoxStreamExpectHeader
 
-    _socket = socket
-    Debug.out("_BoxStreamNotify: connected to: " + Identity.cypherlink(remote_pk))
-    _notify = RPCConnectionServer(_socket, self_pk, self_sk, remote_pk)
+    _notify.connected_to(conn, peer_pk)
 
-  fun ref connect_failed(conn: TCPConnection ref) => None
+  fun ref connect_failed(conn: TCPConnection ref) =>
+    _notify.connect_failed(conn)
 
   fun ref sent(conn: TCPConnection ref, data: ByteSeq): ByteSeq =>
     // The client only calls write if the data fits into a single chunk
     try
       _boxstream.encrypt(data)?
     else
-      Debug.err("_BoxStreamNotify: error while encrypting write, drop it like it's hot")
+      _logger(Error) and _logger.log(
+        "Error while encrypting write, drop it like it's hot"
+      )
       ""
     end
 
@@ -53,7 +56,9 @@ class _BoxStreamNotify is TCPConnectionNotify
       try
         io_vecs.push(_boxstream.encrypt(chunk)?)
       else
-        Debug.err("_BoxStreamNotify: error while encrypting chunk, drop it like it's hot")
+        _logger(Error) and _logger.log(
+          "Error while encrypting chunk: drop it like it's hot"
+        )
       end
     end
 
@@ -79,7 +84,9 @@ class _BoxStreamNotify is TCPConnectionNotify
         end
 
       | let info: _BoxStreamExpectBody =>
-        _notify._chunk(_boxstream.decrypt(info.auth_tag, msg)?.iso_array())
+        let decrypted = _boxstream.decrypt(info.auth_tag, msg)?.iso_array()
+        _notify.received(conn, consume decrypted, _notify_called)
+        _notify_called = _notify_called + 1
         conn.expect(_boxstream.header_size())?
         _state = _BoxStreamExpectHeader
       end
@@ -87,10 +94,11 @@ class _BoxStreamNotify is TCPConnectionNotify
       true
     else
       conn.close()
-      Debug.err("Error: _BoxStreamNotify bad recv")
+      _logger(Error) and _logger.log("Bad boxstream receive")
       false
     end
 
   fun ref closed(conn: TCPConnection ref) =>
     // TODO(borja): Should we send the goodbye here?
-    None
+    _notify.closed(conn)
+

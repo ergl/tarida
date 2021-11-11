@@ -1,11 +1,12 @@
+use "../rpc"
+use "../sodium"
+use "../ssbjson"
+use "../boxstream"
+
+use "logger"
 use "net"
 use "debug"
 use "collections"
-
-use "rpc"
-use "sodium"
-use "handlers"
-use "package:ssbjson"
 
 // SHS/RPC Ideas:
 // On starting, our TCP server uses a Handshake notify, that performs the SHS mechanism.
@@ -13,6 +14,28 @@ use "package:ssbjson"
 // The outter layer performs the box stream framing and enc/decryption.
 // The next layer is the RPC mechanism, which also handles framing.
 // The RPC layer can either be the final layer, or delegate RPC header parsing to another notifier.
+
+class iso RPCNotify is BoxStreamNotify
+  let _server: RPCConnectionServer
+
+  new iso create(server: RPCConnectionServer) =>
+    _server = server
+
+  fun ref connected_to(conn: TCPConnection, peer_pk: Ed25519Public) =>
+    _server._learn_socket(conn, peer_pk)
+
+  fun ref connect_failed(conn: TCPConnection ref) =>
+    None
+
+  fun ref received(
+    conn: TCPConnection ref,
+    data: Array[U8] iso,
+    times: USize)
+    : Bool
+  =>
+    _server._chunk(consume data)
+    true
+
 
 class val RPCConnection
   let self_pk: Ed25519Public
@@ -28,19 +51,35 @@ class val RPCConnection
     _proxy._write(consume msg)
 
 actor RPCConnectionServer
-  let _socket: TCPConnection
+  let _logger: Logger[String val]
+  let _self_pk: Ed25519Public
+
   // A mapping of sequence number to handler on that stream
   embed _active_handlers: Map[U32, Handler]
   embed _buffer: RPCDecoder
-  embed _conn: RPCConnection
-  let _self_pk: Ed25519Public
 
-  new create(raw_socket: TCPConnection, self_pk: Ed25519Public, self_sk: Ed25519Secret, other_pk: Ed25519Public) =>
-    _socket = raw_socket
+  var _socket: (TCPConnection | None) = None
+  var _conn: (RPCConnection | None) = None
+
+  new create(
+    logger: Logger[String val],
+    self_pk: Ed25519Public,
+    self_sk: Ed25519Secret)
+=>
+    _logger = logger
+    _self_pk = self_pk
+
     _active_handlers = Map[U32, Handler]
     _buffer = RPCDecoder
-    _conn = RPCConnection(this, self_pk, other_pk)
-    _self_pk = self_pk
+
+  be _learn_socket(conn: TCPConnection tag, peer: Ed25519Public) =>
+    _socket = conn
+    match _conn
+    | None =>
+      _conn = RPCConnection(this, _self_pk, peer)
+    else
+      None
+    end
 
   be _write(msg: RPCMsg iso) =>
     let msg' = consume msg
@@ -49,9 +88,9 @@ actor RPCConnectionServer
     // If the message fits in a single chunk, send it directly
     // Otherwise, we split it into chunks, and deliver them using writev
     if bytes.size() <= 4096 then
-      _socket.write(consume bytes)
+      try (_socket as TCPConnection).write(consume bytes) end
     else
-      Debug.out("RPCConnectionServer: scatter " + repr)
+      _logger(Info) and _logger.log("RPCConnectionServer: scatter " + repr)
       _scatter_byte_chunks(consume bytes)
     end
 
@@ -78,7 +117,7 @@ actor RPCConnectionServer
       end
     end
 
-    _socket.writev(consume io_vecs)
+    try (_socket as TCPConnection).writev(consume io_vecs) end
 
   be _chunk(data: (String iso | Array[U8] iso)) =>
     _buffer.append(consume data)
@@ -93,7 +132,7 @@ actor RPCConnectionServer
           Debug.out("RPCConnectionServer: goodbye")
           // The client is going away, clean up all resources
           _cleanup_handlers()
-          _socket.dispose()
+          try (_socket as TCPConnection).dispose() end
           break
         | let msg: RPCMsg iso => _process_msg(consume msg)
         end
@@ -104,10 +143,13 @@ actor RPCConnectionServer
     end
 
   fun ref _cleanup_handlers() =>
-    for h in _active_handlers.values() do
-      h.handle_disconnect(_conn)
-    end
-    _active_handlers.clear()
+    try
+      let conn = _conn as RPCConnection
+      for h in _active_handlers.values() do
+        h.handle_disconnect(conn)
+      end
+      _active_handlers.clear()
+  end
 
   // TODO(borja): If the message is of kind end/err, we should clean up the handler
   fun ref _process_msg(msg: RPCMsg iso) =>
@@ -117,7 +159,7 @@ actor RPCConnectionServer
     if _active_handlers.contains(h_key) then
       try
         let handler_for_msg = _active_handlers(h_key)?
-        handler_for_msg.handle_call(_conn, consume msg)
+        handler_for_msg.handle_call(_conn as RPCConnection, consume msg)
       end
 
       return
@@ -128,7 +170,7 @@ actor RPCConnectionServer
     // If the original seq was a reply, and we don't have a handler,
     // simply drop the message on the floor
     if seq < 0 then
-      Debug.err(
+      _logger(Error) and _logger.log(
         "RPCConnectionServer: got reply to nonexistant handler at seq "
         + h_key.string()
         + ". Msg:"
@@ -142,7 +184,9 @@ actor RPCConnectionServer
     // only way to do that is to inspect the namespace of a json method.
     // So, the message _must_ be json. If it isn't, drop it on the floor.
     if msg.header().type_info isnt JSONMessage then
-      Debug.err("RPCConnectionServer: can't handle msg " + msg.string())
+      _logger(Error) and _logger.log(
+        "RPCConnectionServer: can't handle msg " + msg.string()
+      )
       return
     end
 
@@ -152,7 +196,9 @@ actor RPCConnectionServer
     // message without an already active handler.
     let namespace = msg.namespace()
     if namespace is None then
-      Debug.err("RPCConnectionServer: bad json method " + msg.string())
+      _logger(Error) and _logger.log(
+        "RPCConnectionServer: bad json method " + msg.string()
+      )
       return
     end
 
@@ -174,7 +220,7 @@ actor RPCConnectionServer
       let namespace_str = namespace as String // Can't error, we already know
       match HandlerRegistrar(namespace_str)
       | None =>
-          Debug.err(
+          _logger(Error) and _logger.log(
            "RPCConnectionServer: don't know how to handle "
            + namespace_str
            + " messages. Got msg: "
@@ -182,7 +228,7 @@ actor RPCConnectionServer
           )
 
       | let h: Handler =>
-            h.handle_call(_conn, consume msg)
-            _active_handlers(h_key) = h
+          h.handle_call(_conn as RPCConnection, consume msg)
+          _active_handlers(h_key) = h
       end
     end

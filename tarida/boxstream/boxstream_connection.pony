@@ -1,46 +1,51 @@
-use "shs"
-use "sodium"
-use "bureaucracy"
+use "../shs"
+use "../sodium"
 
+use "logger"
 use "net"
-use "debug"
 
-class iso _SHSNotify is TCPConnectionNotify
+class iso BoxStreamConnection is TCPConnectionNotify
+  let _logger: Logger[String val]
   let _self_pk: Ed25519Public
   let _self_sk: Ed25519Secret
   let _target_pk: (Ed25519Public | None)
   let _shs: (HandshakeServer | HandshakeClient)
-  let _registry: (Custodian | None)
+  var _final_notify: (BoxStreamNotify | None)
 
   new iso server(
-    pk: Ed25519Public,
-    sk: Ed25519Secret,
-    registry: Custodian,
-    shs: HandshakeServer iso)
+    logger: Logger[String] val,
+    notify: BoxStreamNotify,
+    self_pk: Ed25519Public,
+    self_sk: Ed25519Secret,
+    network_id: Array[U8] val)
   =>
-    _self_pk = pk
-    _self_sk = sk
+    _logger = logger
+    _final_notify = consume notify
+    _self_pk = self_pk
+    _self_sk = self_sk
     _target_pk = None
-    _registry = registry
-    _shs = consume ref shs
+    _shs = HandshakeServer(self_pk, self_sk, network_id)
 
   new iso client(
-    pk: Ed25519Public,
-    sk: Ed25519Secret,
-    other_pk: Ed25519Public,
-    shs: HandshakeClient iso)
+    logger: Logger[String] val,
+    notify: BoxStreamNotify,
+    self_pk: Ed25519Public,
+    self_sk: Ed25519Secret,
+    peer_pk: Ed25519Public,
+    network_id: Array[U8] val)
   =>
-    _self_pk = pk
-    _self_sk = sk
-    _target_pk = other_pk
-    _registry = None
-    _shs = consume ref shs
+    _logger = logger
+    _final_notify = consume notify
+    _self_pk = self_pk
+    _self_sk = self_sk
+    _target_pk = peer_pk
+    _shs = HandshakeClient(self_pk, self_sk, peer_pk, network_id)
 
   fun ref connect_failed(conn: TCPConnection ref) =>
-    Debug.out("_SHSNotify closed")
+    _logger(Info) and _logger.log("SHS failed to connect")
 
   fun ref closed(conn: TCPConnection ref) =>
-    Debug.out("_SHSNotify closed")
+    _logger(Info) and _logger.log("SHS closed")
 
   fun ref accepted(conn: TCPConnection ref) =>
     match _shs
@@ -49,10 +54,8 @@ class iso _SHSNotify is TCPConnectionNotify
       try
         // Create ephemeral keys on connection
         conn.expect(s.init()?)?
-        // Register connection in the registry
-        (_registry as Custodian).apply(recover tag conn end)
       else
-        Debug.err("_SHSNotify/server couldn't init")
+        _logger(Error) and _logger.log("SHS server couldn't init")
         conn.close()
       end
     end
@@ -67,7 +70,7 @@ class iso _SHSNotify is TCPConnectionNotify
         conn.write_final(cl_hello)
         conn.expect(expect)?
       else
-        Debug.err("_SHSNotify/client couldn't init")
+        _logger(Error) and _logger.log("SHS client couldn't init")
         conn.close()
       end
     end
@@ -77,16 +80,16 @@ class iso _SHSNotify is TCPConnectionNotify
     remote_pk: Ed25519Public,
     bx: BoxStream iso)
   =>
-
-    let notify = _BoxStreamNotify(
-      recover tag conn end,
-      _self_pk,
-      _self_sk,
-      remote_pk,
-      consume bx
-    )
-    conn.set_notify(consume notify)
-
+    // This is a workaround to having to consume an iso field
+    match _final_notify
+    | let notify: BoxStreamNotify =>
+      _final_notify = None
+      conn.set_notify(_BoxStreamTCPNotify._create(_logger, consume notify,
+        consume bx, recover tag conn end, remote_pk))
+    else
+      None
+    end
+    
   fun ref received(
     conn: TCPConnection ref,
     data: Array[U8] iso,
@@ -97,7 +100,7 @@ class iso _SHSNotify is TCPConnectionNotify
     try
       (let expect, let resp) = _shs.step(consume msg)?
       if expect == 0 then
-        Debug.out("Handshake complete")
+        _logger(Info) and _logger.log("Handshake complete")
         let boxstream = _shs.boxstream()?
         conn.expect(boxstream.header_size())?
         match _shs
@@ -113,28 +116,8 @@ class iso _SHSNotify is TCPConnectionNotify
         conn.write_final(resp)
       end
     else
-      Debug.err("_SHSNotify: bad SHS")
+      _logger(Error) and _logger.log("SHS: bad key exchange message")
       conn.close()
     end
 
     true
-
-primitive Handshake
-  fun client(
-    auth: AmbientAuth,
-    pk: Ed25519Public,
-    sk: Ed25519Secret,
-    target_pk: Ed25519Public,
-    target_ip: String,
-    target_port: String)
-    : TCPConnection
-  =>
-
-    let notify = _SHSNotify.client(
-      pk,
-      sk,
-      target_pk,
-      HandshakeClient(pk, sk, target_pk, DefaultNetworkId())
-    )
-
-    TCPConnection(NetAuth(auth), consume notify, target_ip, target_port)
