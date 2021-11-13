@@ -1,5 +1,5 @@
 use "../config"
-use "../discovery"
+use "../announcements"
 use "../sodium"
 use "../identity"
 use "../handlers"
@@ -40,9 +40,16 @@ class CmdClient
         None
       end
 
-      if config.enable_discovery then
-        Discovery(auth, public, secret, self_config.self_ip, "8008",
-          self_config.self_port, autoconn_custodian)
+      if config.enable_broadcast then
+        Announcement(
+          logger,
+          NetAuth(auth),
+          public,
+          self_config.self_ip,
+          "8008",
+          self_config.self_port)
+        // Discovery(auth, public, secret, self_config.self_ip, "8008",
+        //   self_config.self_port, autoconn_custodian)
       end
 
       logger(Info) and logger.log("About to decode: " + self_config.server_pk)

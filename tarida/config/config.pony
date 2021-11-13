@@ -22,6 +22,7 @@ class val Config
   var log_level: logger.LogLevel = logger.Error
   var identity_path: String = ""
   var enable_discovery: Bool = false
+  var enable_broadcast: Bool = false
   var enable_autoconnect: Bool = false
   var mode_config: (ServerConfig
     | ClientConfig
@@ -49,7 +50,8 @@ primitive ParseArgs
       error
     end
 
-    config.enable_discovery = cmd.option("broadcast").bool()
+    config.enable_broadcast = cmd.option("broadcast").bool()
+    config.enable_discovery = cmd.option("discovery").bool()
     config.enable_autoconnect = cmd.option("autoconnect").bool()
 
     config.mode_config =
@@ -144,13 +146,19 @@ primitive ParseArgs
 
         OptionSpec.bool(
           "broadcast",
-          "Enable local UDP broadcast"
+          "Enable local UDP advertisements"
           where short' = 'b',
           default' = false)
 
         OptionSpec.bool(
+          "discovery",
+          "Enable listening for local UDP peer announcements"
+          where short' = 'd',
+          default' = false)
+
+        OptionSpec.bool(
           "broadcast_autoconnect",
-          "Attempt to utoconnect to received local announcements"
+          "Attempt to utoconnect to received announcements"
           where default' = false)
       ],
       [

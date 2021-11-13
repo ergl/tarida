@@ -1,5 +1,5 @@
 use "../config"
-use "../discovery"
+use "../announcements"
 use "../sodium"
 use "../boxstream"
 use "../identity"
@@ -40,9 +40,14 @@ class CmdServer
         None
       end
 
-      if config.enable_discovery then
-        Discovery(auth, public, secret, self_config.self_ip, "8008",
-          self_config.self_port, autoconn_custodian)
+      if config.enable_broadcast then
+        Announcement(
+          logger,
+          NetAuth(auth),
+          public,
+          self_config.self_ip,
+          "8008",
+          self_config.self_port)
       end
 
       let notify = _ServerListener.create(logger, public, secret, custodian)
