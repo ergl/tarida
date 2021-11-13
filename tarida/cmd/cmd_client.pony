@@ -63,11 +63,14 @@ class CmdClient
         NetAuth(auth),
         BoxStreamConnection.client(
           logger,
-          RPCNotify(RPCConnectionServer(
+          RPCNotify(
             logger,
-            public,
-            secret
-          )),
+            RPCConnectionServer(
+              logger,
+              public,
+              secret
+            )
+          ),
           public,
           secret,
           server_pk,

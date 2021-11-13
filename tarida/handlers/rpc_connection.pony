@@ -2,6 +2,7 @@ use "../rpc"
 use "../sodium"
 use "../ssbjson"
 use "../boxstream"
+use "../identity"
 
 use "logger"
 use "net"
@@ -16,12 +17,16 @@ use "collections"
 // The RPC layer can either be the final layer, or delegate RPC header parsing to another notifier.
 
 class iso RPCNotify is BoxStreamNotify
+  let _logger: Logger[String]
   let _server: RPCConnectionServer
 
-  new iso create(server: RPCConnectionServer) =>
+  new iso create(logger: Logger[String], server: RPCConnectionServer) =>
+    _logger = logger
     _server = server
 
   fun ref connected_to(conn: TCPConnection, peer_pk: Ed25519Public) =>
+    _logger(Info) and _logger.log("Incoming rpc connection from "
+      + Identity.cypherlink(peer_pk))
     _server._learn_socket(conn, peer_pk)
 
   fun ref connect_failed(conn: TCPConnection ref) =>

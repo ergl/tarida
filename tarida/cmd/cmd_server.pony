@@ -87,11 +87,14 @@ class _ServerListener is TCPListenNotify
     _log(Info) and _log.log("Server starting with SHS")
     BoxStreamConnection.server(
       _log,
-      RPCNotify(RPCConnectionServer(
+      RPCNotify(
         _log,
-        _pk,
-        _sk
-      )),
+        RPCConnectionServer(
+          _log,
+          _pk,
+          _sk
+        )
+      ),
       _pk,
       _sk,
       DefaultNetworkId()
